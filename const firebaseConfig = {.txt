@@ -1,8 +1,0 @@
-const firebaseConfig = {
-    apiKey: "AIzaSyDbWHfIJHKFucM6hgZY3PGwecPIOu5YShQ",
-    authDomain: "slither-io-7be10.firebaseapp.com",
-    projectId: "slither-io-7be10",
-    storageBucket: "slither-io-7be10.firebasestorage.app",
-    messagingSenderId: "71309559354",
-    appId: "1:71309559354:web:cbdc5474b847d585545703"
-  };
