@@ -1,0 +1,2146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Slither.io プロ・マルチチャット</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0b0f19;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+        .dot-pulse {
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+        /* スクロールバーのカスタマイズ */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(6, 182, 212, 0.4);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen flex items-center justify-center">
+
+    <!-- ゲームキャンバス -->
+    <canvas id="gameCanvas" class="absolute inset-0 w-full h-full"></canvas>
+
+    <!-- UI レイヤー -->
+
+    <!-- 1. スタート画面 (モード選択、詳細設定、サーバー検索、ロビーチャット) -->
+    <div id="startScreen" class="absolute z-10 bg-slate-900/95 border border-cyan-500/30 text-white p-5 rounded-2xl shadow-2xl max-w-4xl w-11/12 flex flex-col md:flex-row gap-5 backdrop-blur-sm transition-all duration-300 max-h-[92vh] overflow-y-auto">
+        
+        <!-- 左カラム: ゲーム設定 ＆ モード選択 -->
+        <div class="flex-1 flex flex-col justify-between text-left">
+            <div>
+                <div class="flex items-center gap-3 mb-2 justify-center md:justify-start">
+                    <div class="w-10 h-10 bg-gradient-to-tr from-cyan-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                        <i class="fa-solid fa-gamepad text-xl text-white"></i>
+                    </div>
+                    <h1 class="text-2xl font-extrabold tracking-wider bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
+                        SLITHER.IO ADVANCED
+                    </h1>
+                </div>
+                
+                <!-- モード選択タブ -->
+                <div class="flex bg-slate-950/80 p-1 rounded-xl border border-slate-800 mb-3 text-center">
+                    <button id="tabNormal" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md">
+                        <i class="fa-solid fa-robot mr-1.5"></i>ノーマル (オフライン)
+                    </button>
+                    <button id="tabOnline" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white">
+                        <i class="fa-solid fa-earth-americas mr-1.5"></i>オンライン
+                    </button>
+                </div>
+
+                <!-- 名前 ＆ カラー -->
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div class="text-left">
+                        <label class="block text-[9px] font-bold text-slate-400 mb-1 uppercase">名前</label>
+                        <input type="text" id="nicknameInput" value="SlitherSnake" maxlength="12" 
+                            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors">
+                    </div>
+                    <div class="text-left">
+                        <label class="block text-[9px] font-bold text-slate-400 mb-1 uppercase">カラー</label>
+                        <div class="flex justify-start items-center h-8 gap-1.5" id="skinSelector">
+                            <!-- スキンボタンを生成 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ノーマルモード説明 -->
+                <div id="panelNormal" class="bg-slate-950/30 border border-slate-800/80 rounded-xl p-3 text-left text-[11px] text-slate-400 mb-3">
+                    <p class="font-bold text-slate-300 mb-1"><i class="fa-solid fa-circle-play text-cyan-400 mr-1"></i> シングルプレイ</p>
+                    サーバー通信なしで、ローカルの賢いAIヘビ25匹とすぐに対戦。ネットワークを消費せずサクサク遊べます。
+                </div>
+
+                <!-- オンラインモード設定パネル -->
+                <div id="panelOnline" class="hidden space-y-3 mb-3">
+                    <!-- オンラインサブモード (パブリック / プライベート) -->
+                    <div class="grid grid-cols-2 gap-2 p-1 bg-slate-950/40 rounded-lg border border-slate-800/50 text-xs text-center">
+                        <button id="subTabPublic" class="py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow">
+                            パブリック (自動合流)
+                        </button>
+                        <button id="subTabPrivate" class="py-1 text-slate-400 hover:text-white font-bold rounded">
+                            プライベート (部屋作成/検索)
+                        </button>
+                    </div>
+
+                    <!-- プライベート設定エリア -->
+                    <div id="privateSettingsArea" class="hidden space-y-2 bg-slate-950/50 border border-slate-800/80 p-3 rounded-xl text-xs">
+                        <div>
+                            <label class="block text-[9px] font-bold text-slate-400 mb-1">部屋のパスワード (英数字のみ)</label>
+                            <input type="text" id="roomPasswordInput" placeholder="例: room777" maxlength="15"
+                                class="w-full bg-slate-800 border-2 border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono font-bold">
+                        </div>
+
+                        <div class="flex gap-4 pt-1">
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="privateRole" id="roleGuest" checked class="text-cyan-500 bg-slate-800 border-slate-700 focus:ring-0">
+                                既存の部屋に入る
+                            </label>
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="privateRole" id="roleHost" class="text-cyan-500 bg-slate-800 border-slate-700 focus:ring-0">
+                                部屋を作成する (ホスト)
+                            </label>
+                        </div>
+
+                        <!-- ホスト専用設定 -->
+                        <div id="hostCustomSettings" class="hidden space-y-1.5 border-t border-slate-800 pt-2 text-[10px]">
+                            <div class="text-cyan-400 font-bold mb-1">ルーム詳細カスタム設定</div>
+                            <div>
+                                <div class="flex justify-between text-slate-400">
+                                    <span>世界の広さ:</span> <span id="valWorldSize" class="text-cyan-400 font-bold">4000x4000</span>
+                                </div>
+                                <input type="range" id="cfgWorldSize" min="2000" max="5000" step="500" value="4000" class="w-full accent-cyan-500">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-slate-400">
+                                    <span>AIヘビの数:</span> <span id="valAiCount" class="text-cyan-400 font-bold">25匹</span>
+                                </div>
+                                <input type="range" id="cfgAiCount" min="0" max="40" step="5" value="25" class="w-full accent-cyan-500">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-slate-400">
+                                    <span>エサ最大数:</span> <span id="valFoodCount" class="text-cyan-400 font-bold">800個</span>
+                                </div>
+                                <input type="range" id="cfgFoodCount" min="100" max="1200" step="100" value="800" class="w-full accent-cyan-500">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- デバイス操作設定 -->
+                <div class="p-2 bg-slate-950/30 rounded-xl border border-slate-800/60 text-left mb-3">
+                    <label class="flex items-center gap-2 text-[11px] font-semibold text-slate-300 cursor-pointer select-none">
+                        <input type="checkbox" id="mobileControlsCheckbox" class="w-4 h-4 rounded text-cyan-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer">
+                        <span>モバイル操作UI（ジョイスティック＆ダッシュボタン）を表示</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- スタートボタン ＆ 接続状態 -->
+            <div>
+                <div id="connectionStatus" class="text-[10px] bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60 flex items-center justify-center gap-2 mb-2">
+                    <div class="w-2 h-2 rounded-full bg-amber-500 dot-pulse" id="statusIndicator"></div>
+                    <span id="statusText" class="text-slate-400">サーバー接続中...</span>
+                </div>
+                <button id="startButton" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-white font-bold text-base rounded-xl shadow-lg hover:shadow-cyan-500/20 active:scale-95 transition-all duration-150">
+                    ゲームスタート
+                </button>
+            </div>
+        </div>
+
+        <!-- 右カラム: サーバー検索（部屋リスト） ＆ ロビーチャット -->
+        <div class="flex-1 border-t md:border-t-0 md:border-l border-slate-800 pt-4 md:pt-0 md:pl-5 flex flex-col justify-between max-h-[80vh] md:max-h-none">
+            
+            <!-- 1. サーバー検索 (部屋リスト) -->
+            <div id="lobbyRoomListArea" class="flex flex-col h-1/2 min-h-[160px] mb-4">
+                <div class="text-xs font-bold text-cyan-400 mb-1.5 text-left flex justify-between items-center">
+                    <span><i class="fa-solid fa-server mr-1"></i> プライベート部屋リスト (サーバー検索)</span>
+                </div>
+                <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl flex-1 p-2 overflow-y-auto text-left text-xs" id="lobbyRoomList">
+                    <p class="text-slate-500 text-center mt-6">オンラインモードを選択するとアクティブな部屋がここに表示されます</p>
+                </div>
+            </div>
+
+            <!-- 2. ロビー共通チャット -->
+            <div class="flex flex-col h-1/2 min-h-[180px]">
+                <div class="text-xs font-bold text-emerald-400 mb-1.5 text-left flex justify-between items-center">
+                    <span><i class="fa-solid fa-comments mr-1"></i> ロビーチャット (GLOBAL)</span>
+                    <span class="text-[9px] text-slate-500 font-mono">ONLINE ID: <span id="userIdDisplay" class="text-slate-400 select-all">接続待ち</span></span>
+                </div>
+                <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl flex-1 p-2 overflow-y-auto text-left text-[11px] font-mono space-y-1.5 h-32 flex flex-col-reverse" id="lobbyChatMessages">
+                    <!-- チャットログ -->
+                </div>
+                <form id="lobbyChatForm" class="flex gap-1.5 mt-2">
+                    <input type="text" id="lobbyChatInput" placeholder="メッセージを入力... (Enterで送信)" class="flex-1 bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 font-sans" required>
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded text-xs font-bold"><i class="fa-solid fa-paper-plane"></i></button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 2. インゲームHUD (プレイ中) -->
+    <div id="hud" class="hidden absolute inset-0 pointer-events-none z-5">
+        <!-- 左上: スコア / 部屋情報 / チャットトリガー -->
+        <div class="absolute top-4 left-4 bg-slate-900/80 border border-slate-700/50 p-4 rounded-xl text-white backdrop-blur-sm pointer-events-auto flex flex-col gap-1 text-left min-w-[150px]">
+            <div class="text-xs text-slate-400 font-medium">現在のスコア</div>
+            <div class="text-2xl font-bold text-cyan-400" id="scoreDisplay">100</div>
+            <div class="text-[10px] text-slate-400" id="rankDisplay">順位: -- / --</div>
+            <div class="text-[9px] text-amber-400 font-bold" id="roomDisplay">ROOM: NORMAL</div>
+            
+            <!-- チャット展開ボタン -->
+            <button id="btnOpenGameChat" class="mt-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg flex items-center justify-center gap-1 active:scale-95 transition-all shadow">
+                <i class="fa-solid fa-comment"></i> CHAT (Enter)
+            </button>
+        </div>
+
+        <!-- 右上: リーダーボード (ランキング) -->
+        <div class="absolute top-4 right-4 bg-slate-900/80 border border-slate-700/50 p-4 rounded-xl text-white backdrop-blur-sm w-56 pointer-events-auto">
+            <h3 class="text-xs font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-2 mb-2 flex items-center justify-between">
+                <span id="rankingTitle">ランキング</span>
+                <i class="fa-solid fa-crown text-amber-400"></i>
+            </h3>
+            <ol class="space-y-1 text-xs" id="leaderboardList">
+                <!-- 動的に更新 -->
+            </ol>
+        </div>
+
+        <!-- インゲーム・チャットオーバーレイ -->
+        <div id="gameChatOverlay" class="hidden absolute inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center pointer-events-auto z-10 transition-opacity duration-200">
+            <div class="bg-slate-900/95 border border-emerald-500/40 w-11/12 max-w-lg rounded-2xl p-4 shadow-2xl flex flex-col gap-3">
+                <div class="flex justify-between items-center text-xs font-bold text-emerald-400 border-b border-slate-800 pb-2">
+                    <span><i class="fa-solid fa-comments mr-1.5 animate-pulse"></i>ゲームチャット &amp; 一時停止中 <span class="text-rose-400 text-[10px]">(無敵ゴーストモード発動中)</span></span>
+                    <button id="btnCloseGameChat" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-sm"></i></button>
+                </div>
+                <!-- インゲームチャットの表示エリア -->
+                <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-3 h-48 overflow-y-auto text-left text-xs font-mono space-y-2 flex flex-col-reverse" id="gameChatMessages">
+                    <!-- チャットログ -->
+                </div>
+                <form id="gameChatForm" class="flex gap-2">
+                    <input type="text" id="gameChatInput" placeholder="メッセージを入力してEnterで送信..." class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-xs">送信</button>
+                </form>
+                <div class="text-[9px] text-slate-500 text-left">
+                    ※チャット画面を閉じると、ゴーストモード（無敵）が解除されゲームに復帰します。
+                </div>
+            </div>
+        </div>
+
+        <!-- 右下: ミニマップ -->
+        <div class="absolute bottom-4 right-4 bg-slate-900/80 border border-slate-700/50 p-2 rounded-xl text-white backdrop-blur-sm pointer-events-auto flex flex-col items-center">
+            <canvas id="minimap" class="w-28 h-28 bg-slate-950/50 rounded-lg border border-slate-800"></canvas>
+            <span class="text-[10px] text-slate-400 mt-1">ミニマップ</span>
+        </div>
+
+        <!-- モバイル用ジョイスティック＆ダッシュボタンエリア -->
+        <div id="mobileControlsArea" class="hidden absolute inset-0 pointer-events-none select-none">
+            <!-- ジョイスティック -->
+            <div id="joystickZone" class="absolute bottom-12 left-12 w-28 h-28 rounded-full border-2 border-white/20 bg-white/5 pointer-events-auto flex items-center justify-center active:border-cyan-500/50 transition-colors">
+                <div id="joystickKnob" class="w-10 h-10 rounded-full bg-cyan-500/60 shadow-lg shadow-cyan-500/20 transform translate-x-0 translate-y-0 transition-transform duration-75"></div>
+            </div>
+
+            <!-- ダッシュ -->
+            <button id="dashButton" class="absolute bottom-16 right-36 w-20 h-20 rounded-full bg-emerald-500/50 border-2 border-emerald-400/30 text-white flex flex-col items-center justify-center font-bold text-xs pointer-events-auto active:bg-emerald-400 active:scale-95 transition-all shadow-lg select-none">
+                <i class="fa-solid fa-bolt text-lg mb-1 animate-bounce"></i>
+                DASH
+            </button>
+        </div>
+    </div>
+
+    <!-- 3. ゲームオーバー画面 -->
+    <div id="gameOverScreen" class="hidden absolute z-10 bg-slate-900/95 border border-rose-500/30 text-white p-8 rounded-2xl shadow-2xl max-w-sm w-11/12 text-center backdrop-blur-sm transition-all duration-300">
+        <div class="flex justify-center mb-4">
+            <div class="w-16 h-16 bg-gradient-to-tr from-rose-600 to-orange-500 rounded-full flex items-center justify-center shadow-lg shadow-rose-500/20">
+                <i class="fa-solid fa-skull text-3xl text-white"></i>
+            </div>
+        </div>
+        <h2 class="text-3xl font-extrabold mb-1 tracking-wider text-rose-500">DEFEATED!</h2>
+        <p class="text-xs text-slate-400 mb-6">他のヘビの体に激突してしまいました...</p>
+
+        <div class="bg-slate-950/50 rounded-xl p-4 mb-6 border border-slate-800 space-y-3">
+            <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-400">最終長さ (スコア)</span>
+                <span class="font-bold text-xl text-cyan-400" id="finalScore">0</span>
+            </div>
+            <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-400">撃破したヘビ</span>
+                <span class="font-bold text-emerald-400 text-lg" id="finalKills">0</span>
+            </div>
+        </div>
+
+        <button id="restartButton" class="w-full py-4 bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-400 hover:to-orange-400 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-rose-500/20 active:scale-95 transition-all duration-150">
+            ロビーに戻る
+        </button>
+    </div>
+
+    <!-- 汎用メッセージ通知用トースト -->
+    <div id="toast" class="absolute top-24 left-1/2 transform -translate-x-1/2 bg-slate-900/90 border border-amber-500/50 text-amber-300 px-4 py-2 rounded-lg text-xs font-semibold opacity-0 pointer-events-none transition-all duration-300 z-20 flex items-center gap-2">
+        <i class="fa-solid fa-bolt text-amber-400"></i>
+        <span id="toastText">通知メッセージ</span>
+    </div>
+
+    <!-- Firebase SDK & Multi-player modules -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // =====================================================================
+        // 🔥 あなたのFIREBASE設定（ここを書き換えてね！）🔥
+        // =====================================================================
+        // Firebaseコンソールでプロジェクトを作成し、ウェブアプリを登録した際に表示される
+        // 「firebaseConfig」をそのままここに貼り付けてください。
+        // 例: 
+        // const myCustomConfig = {
+        //     apiKey: "AIzaSyA1B2C3...",
+        //     authDomain: "xxxx.firebaseapp.com",
+        //     projectId: "xxxx",
+        //     appId: "1:xxx"
+        // };
+        const myCustomConfig = null; // 👈 ここに貼り付けてね！(nullを自分のオブジェクトに上書き)
+
+        // ==========================================
+        // Firebase初期化と認証設定 (ルール3準拠)
+        // ==========================================
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'slither-multi-default';
+        let firebaseConfig = null;
+        let isConfigured = false;
+
+        // 環境に合わせた自動判定
+        if (myCustomConfig && myCustomConfig.apiKey) {
+            firebaseConfig = myCustomConfig;
+            isConfigured = true;
+        } else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            firebaseConfig = JSON.parse(__firebase_config);
+            isConfigured = true;
+        } else {
+            // ローカル（オフライン）でエラーなく動かすためのダミー枠
+            firebaseConfig = {
+                apiKey: "dummy-key-offline",
+                authDomain: "dummy.firebaseapp.com",
+                projectId: "dummy-project",
+                storageBucket: "dummy.appspot.com",
+                messagingSenderId: "12345",
+                appId: "1:1234:web:1234"
+            };
+            isConfigured = false; // 未設定マーク
+        }
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        let isFirebaseConnected = false;
+
+        // 起動時に匿名認証を実行
+        async function initAuth() {
+            if (!isConfigured) {
+                document.getElementById('statusText').innerText = "オフライン・ローカルモード";
+                document.getElementById('statusIndicator').className = "w-2 h-2 rounded-full bg-slate-500";
+                return;
+            }
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Authentication failed:", err);
+                document.getElementById('statusText').innerText = "サーバー接続失敗。再読み込みしてください。";
+                document.getElementById('statusIndicator').className = "w-2 h-2 rounded-full bg-rose-500";
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user && isConfigured) {
+                currentUser = user;
+                isFirebaseConnected = true;
+                document.getElementById('userIdDisplay').innerText = user.uid;
+                document.getElementById('statusText').innerText = "オンラインサーバー接続完了！";
+                document.getElementById('statusIndicator').className = "w-2 h-2 rounded-full bg-emerald-500";
+                
+                // 確実に許可されている「players」コレクションを安全に1つのチャンネルとして監視
+                setupMultiplayerSubscription();
+            } else {
+                currentUser = null;
+                isFirebaseConnected = false;
+            }
+        });
+
+        initAuth();
+
+        // ==========================================
+        // 定数 & 動的ゲーム設定値
+        // ==========================================
+        let WORLD_SIZE = 4000;         // 世界の幅・高さ
+        let BASE_SPEED = 2.0;          // 基本移動速度
+        let DASH_SPEED = 4.2;          // ダッシュ時移動速度
+        const GRID_SIZE = 100;         // グリッドの間隔
+        let AI_COUNT = 25;             // AI出現数
+        let FOOD_COUNT = 800;          // エサの配置数
+        let SPECIAL_FOOD_COUNT = 50;   // 特殊エサ配置数
+
+        // モード管理
+        let gameMode = 'normal';       // 'normal' または 'online'
+        let onlineSubMode = 'public';  // 'public' または 'private'
+        let currentRoomId = 'global';  // 所属ルームID（ロビー時はglobal, 開始すると部屋IDに変更）
+        let isRoomHost = false;        // プライベート部屋のホストフラグ
+        let isChatActive = false;      // チャットウィンドウが開いているか
+
+        // チャット履歴管理マップ（重複出力を防止）
+        const processedChats = {};     // { senderUid: time }
+        const lobbyChatHistory = [];   // ロビーチャットキャッシュ
+        const gameChatHistory = [];    // インゲームチャットキャッシュ
+
+        // スキンのカラーパレット
+        const SKINS = [
+            { name: 'シアン', primary: '#06b6d4', secondary: '#0891b2', glow: 'rgba(6, 182, 212, 0.4)' },
+            { name: 'エメラルド', primary: '#10b981', secondary: '#059669', glow: 'rgba(16, 185, 129, 0.4)' },
+            { name: 'マゼンタ', primary: '#ec4899', secondary: '#db2777', glow: 'rgba(236, 72, 153, 0.4)' },
+            { name: 'アンバー', primary: '#f59e0b', secondary: '#d97706', glow: 'rgba(245, 158, 11, 0.4)' },
+            { name: 'バイオレット', primary: '#8b5cf6', secondary: '#7c3aed', glow: 'rgba(139, 92, 246, 0.4)' }
+        ];
+
+        const AI_NAMES = [
+            'CobraAI', 'NeonWorm', 'GlowHunter', 'DangerNoodle', 'Basilisk',
+            'Ouroboros', 'SlitherBot', 'ViperAI', 'SwiftSnake', 'ShadowCoil'
+        ];
+
+        // ==========================================
+        // ゲームステート
+        // ==========================================
+        let canvas, ctx;
+        let minimapCanvas, minimapCtx;
+        
+        let player = null;
+        let snakes = []; 
+        let foods = [];
+
+        let selectedSkinIndex = 0;
+        let isPlaying = false;
+        let totalKills = 0;
+        let useMobileControls = false;
+
+        const keys = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            dash: false
+        };
+
+        let joystickActive = false;
+        let joystickStart = { x: 0, y: 0 };
+        let joystickCurrent = { x: 0, y: 0 };
+        let isMobileDashing = false;
+
+        // ==========================================
+        // ヘビ クラス
+        // ==========================================
+        class Snake {
+            constructor(id, name, x, y, skin, isAI = true) {
+                this.id = id;
+                this.name = name;
+                this.isAI = isAI;
+                this.skin = skin;
+                this.isRemote = false; 
+                this.isGhost = false;  
+                
+                this.x = x;
+                this.y = y;
+                this.angle = Math.random() * Math.PI * 2;
+                this.targetAngle = this.angle;
+
+                this.score = 100;
+                this.speed = BASE_SPEED;
+                this.isDashing = false;
+
+                this.body = [];
+                const segmentCount = 10;
+                for (let i = 0; i < segmentCount; i++) {
+                    this.body.push({ x: this.x, y: this.y });
+                }
+
+                this.width = 12;
+                this.isDead = false;
+
+                if (this.isAI) {
+                    this.aiTargetX = Math.random() * WORLD_SIZE;
+                    this.aiTargetY = Math.random() * WORLD_SIZE;
+                    this.aiDecisionTimer = 0;
+                }
+            }
+
+            updateWidth() {
+                this.width = Math.min(Math.max(12 + (this.score - 100) * 0.02, 10), 38);
+            }
+
+            update() {
+                if (this.isDead || this.isRemote) return;
+
+                // チャット起動中は自機ヘビの移動・ブーストを停止 (一時停止ゴースト状態)
+                if (this.id === 'player' && isChatActive) {
+                    this.isGhost = true;
+                    this.speed = 0;
+                    return;
+                } else if (this.id === 'player') {
+                    this.isGhost = false;
+                }
+
+                this.updateWidth();
+
+                if (this.isDashing && this.score > 120) {
+                    this.speed = DASH_SPEED;
+                    if (Math.random() < 0.12) { 
+                        this.score -= 2;
+                        const tail = this.body[this.body.length - 1];
+                        foods.push(new Food(
+                            tail.x + (Math.random() - 0.5) * 30,
+                            tail.y + (Math.random() - 0.5) * 30,
+                            2,
+                            true
+                        ));
+                    }
+                } else {
+                    this.speed = BASE_SPEED;
+                }
+
+                let angleDiff = this.targetAngle - this.angle;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+                const turnSpeed = Math.max(0.04, 0.08 - (this.width - 12) * 0.001);
+                this.angle += angleDiff * turnSpeed;
+
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+
+                const margin = 50;
+                if (this.x < margin) { 
+                    this.x = margin; 
+                    if (Math.cos(this.targetAngle) < 0) {
+                        this.targetAngle = Math.atan2(Math.sin(this.targetAngle), 0.1); 
+                    }
+                }
+                if (this.x > WORLD_SIZE - margin) { 
+                    this.x = WORLD_SIZE - margin; 
+                    if (Math.cos(this.targetAngle) > 0) {
+                        this.targetAngle = Math.atan2(Math.sin(this.targetAngle), -0.1); 
+                    }
+                }
+                if (this.y < margin) { 
+                    this.y = margin; 
+                    if (this.targetAngle && Math.sin(this.targetAngle) < 0) {
+                        this.targetAngle = Math.atan2(0.1, Math.cos(this.targetAngle)); 
+                    }
+                }
+                if (this.y > WORLD_SIZE - margin) { 
+                    this.y = WORLD_SIZE - margin; 
+                    if (this.targetAngle && Math.sin(this.targetAngle) > 0) {
+                        this.targetAngle = Math.atan2(-0.1, Math.cos(this.targetAngle)); 
+                    }
+                }
+
+                this.body.unshift({ x: this.x, y: this.y });
+
+                const targetLength = Math.floor(10 + (this.score - 100) / 4);
+                while (this.body.length > targetLength) {
+                    this.body.pop();
+                }
+
+                const spacing = Math.max(4, this.width * 0.25);
+                for (let i = 1; i < this.body.length; i++) {
+                    const current = this.body[i];
+                    const prev = this.body[i - 1];
+                    if (!current || !prev) continue;
+                    const dx = current.x - prev.x;
+                    const dy = current.y - prev.y;
+                    
+                    const absDx = Math.abs(dx);
+                    const absDy = Math.abs(dy);
+                    if (absDx > spacing || absDy > spacing) {
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist > spacing) {
+                            const ratio = spacing / dist;
+                            current.x = prev.x + dx * ratio;
+                            current.y = prev.y + dy * ratio;
+                        }
+                    }
+                }
+
+                if (this.isAI) {
+                    if (gameMode === 'normal' && isChatActive) return;
+                    this.runAI();
+                }
+            }
+
+            runAI() {
+                this.aiDecisionTimer--;
+
+                if (this.aiDecisionTimer <= 0) {
+                    this.aiDecisionTimer = Math.floor(Math.random() * 45) + 20;
+
+                    let dangerDetected = false;
+                    let avoidAngle = 0;
+                    const scanDistanceSq = (150 + this.width) * (150 + this.width);
+
+                    for (const other of snakes) {
+                        if (other.id === this.id || other.isDead || other.isGhost) continue;
+
+                        const headDistSq = (other.x - this.x) * (other.x - this.x) + (other.y - this.y) * (other.y - this.y);
+                        if (headDistSq > 90000) continue;
+
+                        for (let i = 0; i < other.body.length; i += 4) { 
+                            const part = other.body[i];
+                            if (!part) continue;
+                            const dx = part.x - this.x;
+                            const dy = part.y - this.y;
+                            const distSq = dx * dx + dy * dy;
+
+                            if (distSq < scanDistanceSq) {
+                                dangerDetected = true;
+                                const angleToPart = Math.atan2(dy, dx);
+                                avoidAngle += angleToPart + Math.PI;
+                            }
+                        }
+                    }
+
+                    if (dangerDetected) {
+                        this.targetAngle = avoidAngle + (Math.random() - 0.5) * 0.5;
+                        this.isDashing = (this.score > 200 && Math.random() < 0.25);
+                    } else {
+                        let closestFood = null;
+                        let minDistSq = 90000; 
+
+                        for (const f of foods) {
+                            const dx = f.x - this.x;
+                            const dy = f.y - this.y;
+                            const distSq = dx * dx + dy * dy;
+
+                            if (distSq < minDistSq) {
+                                minDistSq = distSq;
+                                closestFood = f;
+                            }
+                        }
+
+                        if (closestFood) {
+                            this.targetAngle = Math.atan2(closestFood.y - this.y, closestFood.x - this.x);
+                            this.isDashing = (closestFood.value > 10 && this.score > 150);
+                        } else {
+                            if (Math.random() < 0.1) {
+                                this.targetAngle += (Math.random() - 0.5) * 2;
+                            }
+                            this.isDashing = false;
+                        }
+                    }
+                }
+            }
+
+            draw(ctx, cameraX, cameraY, zoom) {
+                if (this.isDead || this.body.length < 2) return;
+
+                let isVisible = false;
+                const head = this.body[0];
+                if (!head) return;
+                const dxHead = head.x - cameraX;
+                const dyHead = head.y - cameraY;
+                const halfW = window.innerWidth / 2 / zoom + 150;
+                const halfH = window.innerHeight / 2 / zoom + 150;
+
+                if (Math.abs(dxHead) < halfW && Math.abs(dyHead) < halfH) {
+                    isVisible = true;
+                } else {
+                    const tail = this.body[this.body.length - 1];
+                    if (tail) {
+                        const dxTail = tail.x - cameraX;
+                        const dyTail = tail.y - cameraY;
+                        if (Math.abs(dxTail) < halfW && Math.abs(dyTail) < halfH) {
+                            isVisible = true;
+                        }
+                    }
+                }
+                
+                if (!isVisible) return;
+
+                ctx.save();
+
+                if (this.isGhost) {
+                    ctx.globalAlpha = 0.35;
+                }
+
+                ctx.shadowBlur = (this.isAI ? 4 : 10) * zoom;
+                ctx.shadowColor = this.skin.glow;
+
+                const step = this.body.length > 50 ? 2 : 1; 
+
+                for (let i = this.body.length - 1; i >= 0; i -= step) {
+                    const part = this.body[i];
+                    if (!part) continue;
+                    const screenX = (part.x - cameraX) * zoom + window.innerWidth / 2;
+                    const screenY = (part.y - cameraY) * zoom + window.innerHeight / 2;
+
+                    const factor = i === 0 ? 1.0 : (1.0 - (i / this.body.length) * 0.3);
+                    const drawRadius = (this.width / 2) * factor * zoom * (step === 2 && i > 0 ? 1.15 : 1.0);
+
+                    ctx.beginPath();
+                    ctx.fillStyle = (Math.floor(i / 2) % 2 === 0) ? this.skin.primary : this.skin.secondary;
+                    ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    if (i === 0 || this.body.length < 40) {
+                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+                        ctx.lineWidth = 1 * zoom;
+                        ctx.stroke();
+                    }
+                }
+
+                const headX = (head.x - cameraX) * zoom + window.innerWidth / 2;
+                const headY = (head.y - cameraY) * zoom + window.innerHeight / 2;
+                const headRadius = (this.width / 2) * zoom;
+
+                const eyeAngle = this.angle;
+                const eyeOffsetDist = headRadius * 0.45;
+                const eyeSize = headRadius * 0.28;
+
+                const eyeLeftX = headX + Math.cos(eyeAngle - Math.PI/4) * eyeOffsetDist;
+                const eyeLeftY = headY + Math.sin(eyeAngle - Math.PI/4) * eyeOffsetDist;
+                
+                const eyeRightX = headX + Math.cos(eyeAngle + Math.PI/4) * eyeOffsetDist;
+                const eyeRightY = headY + Math.sin(eyeAngle + Math.PI/4) * eyeOffsetDist;
+
+                ctx.shadowBlur = 0; 
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(eyeLeftX, eyeLeftY, eyeSize, 0, Math.PI * 2);
+                ctx.arc(eyeRightX, eyeRightY, eyeSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                const pupilSize = eyeSize * 0.55;
+                const pupilOffsetX = Math.cos(eyeAngle) * (eyeSize * 0.3);
+                const pupilOffsetY = Math.sin(eyeAngle) * (eyeSize * 0.3);
+
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(eyeLeftX + pupilOffsetX, eyeLeftY + pupilOffsetY, pupilSize, 0, Math.PI * 2);
+                ctx.arc(eyeRightX + pupilOffsetX, eyeRightY + pupilOffsetY, pupilSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = this.isRemote ? '#38bdf8' : 'rgba(255, 255, 255, 0.85)';
+                ctx.font = `bold ${Math.max(10, Math.floor(11 * zoom))}px 'Segoe UI', Arial`;
+                ctx.textAlign = 'center';
+                let displayName = this.isRemote ? `📶 ${this.name}` : this.name;
+                if (this.isGhost) {
+                    displayName += " (チャット中)";
+                }
+                ctx.fillText(displayName, headX, headY - headRadius - (12 * zoom));
+
+                ctx.restore();
+            }
+
+            die() {
+                if (this.isDead) return;
+                this.isDead = true;
+
+                const step = Math.max(3, Math.floor(this.body.length / 30));
+                for (let i = 0; i < this.body.length; i += step) {
+                    const part = this.body[i];
+                    if (!part) continue;
+                    const spawnX = part.x + (Math.random() - 0.5) * 40;
+                    const spawnY = part.y + (Math.random() - 0.5) * 40;
+                    
+                    foods.push(new Food(
+                        spawnX,
+                        spawnY,
+                        Math.floor(Math.random() * 5) + 5,
+                        false
+                    ));
+                }
+
+                if (this.id === 'player' && gameMode === 'online' && currentUser && isConfigured) {
+                    const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
+                    deleteDoc(playerDocRef).catch(e => console.error(e));
+                }
+            }
+        }
+
+        // ==========================================
+        // エサ クラス
+        // ==========================================
+        class Food {
+            constructor(x, y, value = 1, isFromDash = false) {
+                this.x = x;
+                this.y = y;
+                this.value = value;
+                this.isFromDash = isFromDash;
+
+                this.radius = Math.max(3, Math.min(3 + value * 0.5, 12));
+                
+                const colors = ['#f43f5e', '#3b82f6', '#10b981', '#eab308', '#a855f7', '#06b6d4', '#f97316'];
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+
+                this.pulseTime = Math.random() * Math.PI * 2;
+                this.pulseSpeed = 0.05 + Math.random() * 0.05;
+
+                this.isSpecial = (value > 6) && !isFromDash;
+                if (this.isSpecial) {
+                    this.angle = Math.random() * Math.PI * 2;
+                    this.driftSpeed = 0.3 + Math.random() * 0.4;
+                }
+            }
+
+            update(activeSnakes) {
+                this.pulseTime += this.pulseSpeed;
+
+                let nearestHead = null;
+                let minDistanceSq = 14400; 
+
+                if (activeSnakes && activeSnakes.length > 0) {
+                    for (const s of activeSnakes) {
+                        if (s.isDead || s.isGhost) continue;
+                        
+                        const head = s.body[0];
+                        if (!head) continue;
+                        const dx = head.x - this.x;
+                        const dy = head.y - this.y;
+                        const distSq = dx * dx + dy * dy;
+
+                        if (distSq < minDistanceSq) {
+                            minDistanceSq = distSq;
+                            nearestHead = head;
+                        }
+                    }
+                }
+
+                if (nearestHead) {
+                    const dx = nearestHead.x - this.x;
+                    const dy = nearestHead.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist > 1) {
+                        const magnetSpeed = Math.max(3, (120 - dist) * 0.16);
+                        this.x += (dx / dist) * magnetSpeed;
+                        this.y += (dy / dist) * magnetSpeed;
+                    }
+                } else if (this.isSpecial) {
+                    this.x += Math.cos(this.angle) * this.driftSpeed;
+                    this.y += Math.sin(this.angle) * this.driftSpeed;
+
+                    if (Math.random() < 0.02) {
+                        this.angle += (Math.random() - 0.5) * 1.5;
+                    }
+
+                    this.x = Math.max(20, Math.min(WORLD_SIZE - 20, this.x));
+                    this.y = Math.max(20, Math.min(WORLD_SIZE - 20, this.y));
+                }
+            }
+
+            draw(ctx, cameraX, cameraY, zoom) {
+                const screenX = (this.x - cameraX) * zoom + window.innerWidth / 2;
+                const screenY = (this.y - cameraY) * zoom + window.innerHeight / 2;
+
+                if (screenX < -30 || screenX > window.innerWidth + 30 ||
+                    screenY < -30 || screenY > window.innerHeight + 30) {
+                    return;
+                }
+
+                ctx.save();
+                
+                const sizeBonus = Math.sin(this.pulseTime) * (this.radius * 0.2);
+                const currentRadius = (this.radius + sizeBonus) * zoom;
+
+                ctx.shadowBlur = (this.isSpecial ? 12 : 4) * zoom;
+                ctx.shadowColor = this.color;
+
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, currentRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (this.isSpecial) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(screenX - currentRadius*0.2, screenY - currentRadius*0.2, currentRadius * 0.3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // ==========================================
+        // オンラインマルチプレイヤー同期ロジック (Firestore)
+        // 許可されている players パスのみに統合！
+        // ==========================================
+        let lastSyncTime = 0;
+        const SYNC_INTERVAL = 250; 
+
+        // 最後に送信したチャットメッセージ
+        let pendingChatToSend = null; 
+
+        // 自分のステータスを報告 (playersコレクションに集約)
+        function syncSelfToFirebase() {
+            if (!currentUser || !isPlaying || !player || player.isDead || gameMode !== 'online' || !isConfigured) return;
+
+            const now = Date.now();
+            if (now - lastSyncTime < SYNC_INTERVAL) return;
+            lastSyncTime = now;
+
+            const simplifiedBody = player.body.slice(0, 30).map(part => ({
+                x: Math.round(part.x),
+                y: Math.round(part.y)
+            }));
+
+            const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
+            
+            // 送信ペイロードの組み立て
+            const payload = {
+                uid: currentUser.uid,
+                roomId: currentRoomId, 
+                name: player.name,
+                x: Math.round(player.x),
+                y: Math.round(player.y),
+                angle: Number(player.angle.toFixed(3)),
+                score: player.score,
+                skinIndex: selectedSkinIndex,
+                isDashing: player.isDashing,
+                isGhost: player.isGhost, 
+                body: simplifiedBody,
+                isDead: false,
+                lastUpdated: now
+            };
+
+            // ホストの場合、部屋の詳細設定も乗せる (部屋リスト & 設定共有)
+            if (isRoomHost && onlineSubMode === 'private') {
+                payload.hostConfig = {
+                    worldSize: WORLD_SIZE,
+                    aiCount: AI_COUNT,
+                    foodCount: FOOD_COUNT
+                };
+            }
+
+            // 最新のチャットメッセージがあれば、それを乗せる
+            if (pendingChatToSend) {
+                payload.lastChat = pendingChatToSend;
+            }
+
+            setDoc(playerDocRef, payload).catch(err => {
+                console.error("Firebase sync failed:", err);
+            });
+        }
+
+        // ロビーにいる時のダミー送信 (ゲーム開始前、チャット送信時のみ更新)
+        async function syncLobbyStatus(chatText = null) {
+            if (!currentUser || gameMode !== 'online' || !isConfigured) return;
+            
+            const nickname = document.getElementById('nicknameInput').value.trim() || 'SlitherSnake';
+            const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
+            
+            const now = Date.now();
+            const payload = {
+                uid: currentUser.uid,
+                roomId: 'global', // ロビーにいる事を示す
+                name: nickname,
+                isDead: true, // ロビーでは死に扱い（ゲーム盤面に出さない）
+                lastUpdated: now,
+                skinIndex: selectedSkinIndex
+            };
+
+            if (chatText) {
+                const chatObj = {
+                    text: chatText,
+                    time: now
+                };
+                payload.lastChat = chatObj;
+                pendingChatToSend = chatObj;
+            }
+
+            try {
+                await setDoc(playerDocRef, payload);
+            } catch (e) {
+                console.error("Error sending lobby update:", e);
+            }
+        }
+
+        let unsubscribePlayers = null;
+        function setupMultiplayerSubscription() {
+            if (!currentUser || !isConfigured) return;
+
+            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+            
+            if (unsubscribePlayers) unsubscribePlayers();
+
+            unsubscribePlayers = onSnapshot(playersCol, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    const id = change.doc.id;
+                    const data = change.doc.data();
+
+                    if (id === currentUser.uid) return; 
+
+                    if (change.type === 'removed' || (data && data.isDead)) {
+                        removeRemoteSnake(id);
+                    } else if (data) {
+                        if (Date.now() - data.lastUpdated > 5000) {
+                            removeRemoteSnake(id);
+                            return;
+                        }
+
+                        // 同一の部屋(currentRoomId)のプレイヤーのみ物理判定・同期
+                        if (data.roomId === currentRoomId) {
+                            updateRemoteSnake(id, data);
+                        } else {
+                            removeRemoteSnake(id);
+                        }
+
+                        // 【安全なチャット受信同期処理】
+                        // すべての接続済みヘビから送信される .lastChat をリアルタイム監視し、メモリ上で最新ログを抽出
+                        if (data.lastChat && data.lastChat.time && data.lastChat.text) {
+                            const chatKey = `${id}_${data.lastChat.time}`;
+                            if (!processedChats[chatKey]) {
+                                processedChats[chatKey] = true; // 既読処理
+                                
+                                const receivedMsg = {
+                                    senderUid: id,
+                                    senderName: data.name || 'RemotePlayer',
+                                    text: data.lastChat.text,
+                                    time: data.lastChat.time,
+                                    roomId: data.roomId
+                                };
+
+                                handleChatReceived(receivedMsg);
+                            }
+                        }
+                    }
+                });
+
+                // サーバー検索（部屋リスト）の構築
+                const rawRooms = [];
+                const now = Date.now();
+                snapshot.forEach(docSnap => {
+                    const d = docSnap.data();
+                    if (d && d.hostConfig && d.roomId !== 'global' && d.roomId !== 'public' && (now - d.lastUpdated < 6000)) {
+                        rawRooms.push({
+                            id: d.roomId,
+                            worldSize: d.hostConfig.worldSize,
+                            aiCount: d.hostConfig.aiCount,
+                            foodCount: d.hostConfig.foodCount
+                        });
+                    }
+                });
+                renderLobbyRooms(rawRooms);
+
+            }, (error) => {
+                console.error("Multiplayer sync error:", error);
+            });
+        }
+
+        function updateRemoteSnake(id, data) {
+            let remoteSnake = snakes.find(s => s.id === id);
+
+            if (!remoteSnake) {
+                const skin = SKINS[data.skinIndex] || SKINS[0];
+                remoteSnake = new Snake(id, data.name || 'GlowSnake', data.x, data.y, skin, false);
+                remoteSnake.isRemote = true;
+                snakes.push(remoteSnake);
+            }
+
+            remoteSnake.targetX = data.x;
+            remoteSnake.targetY = data.y;
+            remoteSnake.targetAngle = data.angle;
+            remoteSnake.score = data.score;
+            remoteSnake.isDashing = data.isDashing;
+            remoteSnake.isGhost = !!data.isGhost; 
+
+            if (data.body && data.body.length > 0) {
+                remoteSnake.body = data.body;
+            }
+        }
+
+        function removeRemoteSnake(id) {
+            snakes = snakes.filter(s => s.id !== id);
+        }
+
+        function interpolateRemoteSnakes() {
+            snakes.forEach(s => {
+                if (!s.isRemote || s.isDead) return;
+
+                if (s.targetX !== undefined && s.targetY !== undefined) {
+                    const rate = s.isGhost ? 0.05 : 0.15;
+                    s.x += (s.targetX - s.x) * rate;
+                    s.y += (s.targetY - s.y) * rate;
+
+                    let angleDiff = s.targetAngle - s.angle;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                    s.angle += angleDiff * rate;
+                    
+                    s.updateWidth();
+                }
+            });
+        }
+
+        // ==========================================
+        // サーバー検索用の部屋リスト描画
+        // ==========================================
+        function renderLobbyRooms(rooms) {
+            const listContainer = document.getElementById('lobbyRoomList');
+            listContainer.innerHTML = '';
+            
+            // 重複を除去
+            const uniqueRooms = [];
+            const seen = new Set();
+            for (const r of rooms) {
+                if (!seen.has(r.id)) {
+                    seen.add(r.id);
+                    uniqueRooms.push(r);
+                }
+            }
+
+            if (uniqueRooms.length === 0) {
+                listContainer.innerHTML = `<p class="text-slate-500 text-center mt-6">現在稼働中のプライベート部屋はありません</p>`;
+                return;
+            }
+
+            uniqueRooms.forEach(room => {
+                const item = document.createElement('div');
+                item.className = "flex justify-between items-center bg-slate-900 border border-slate-800 hover:border-cyan-500 p-2 rounded-lg mb-1.5 cursor-pointer active:scale-[0.98] transition-all";
+                item.innerHTML = `
+                    <div>
+                        <div class="font-bold text-cyan-400 font-mono flex items-center gap-1">
+                            <i class="fa-solid fa-lock text-slate-500 text-[10px]"></i> ${room.id}
+                        </div>
+                        <div class="text-[9px] text-slate-400 mt-0.5">
+                            広さ: ${room.worldSize} | AI: ${room.aiCount}匹
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[9px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700 font-semibold">選択</span>
+                    </div>
+                `;
+                item.onclick = () => {
+                    document.getElementById('roomPasswordInput').value = room.id;
+                    document.getElementById('roleGuest').checked = true;
+                    document.getElementById('hostCustomSettings').classList.add('hidden');
+                    isRoomHost = false;
+                    showToast(`部屋「${room.id}」を選択しました！`);
+                };
+                listContainer.appendChild(item);
+            });
+        }
+
+        // 強制パブリック自動合流アルゴリズム
+        async function resolvePublicRoom() {
+            if (!isConfigured) return;
+            try {
+                const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+                const querySnapshot = await getDocs(playersCol);
+                
+                const roomCounts = {};
+                const now = Date.now();
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data && data.roomId && data.roomId.startsWith('pub_room_') && (now - data.lastUpdated < 5000)) {
+                        roomCounts[data.roomId] = (roomCounts[data.roomId] || 0) + 1;
+                    }
+                });
+
+                let targetRoom = null;
+                let maxPlayers = 0;
+                for (const roomId in roomCounts) {
+                    if (roomCounts[roomId] > maxPlayers) {
+                        maxPlayers = roomCounts[roomId];
+                        targetRoom = roomId;
+                    }
+                }
+
+                if (targetRoom) {
+                    currentRoomId = targetRoom;
+                    showToast(`他プレイヤーがいる部屋へ自動接続しました！`);
+                } else {
+                    currentRoomId = `pub_room_${Math.floor(Math.random() * 3) + 1}`; 
+                    showToast(`新しいパブリックサーバーに入室しました。`);
+                }
+
+                document.getElementById('roomDisplay').innerText = `ROOM: ${currentRoomId.replace('pub_room_', 'PUBLIC-')}`;
+
+                WORLD_SIZE = 4000;
+                AI_COUNT = 15;
+                FOOD_COUNT = 800;
+
+            } catch (e) {
+                console.error("Failed to auto-resolve active public rooms:", e);
+                currentRoomId = 'pub_room_1';
+                document.getElementById('roomDisplay').innerText = "ROOM: PUBLIC-1";
+            }
+        }
+
+        // ==========================================
+        // リアルタイムチャット受信ハンドラー
+        // ==========================================
+        function handleChatReceived(msg) {
+            const isLobbyChat = msg.roomId === 'global';
+            const history = isLobbyChat ? lobbyChatHistory : gameChatHistory;
+
+            if (history.some(m => m.senderUid === msg.senderUid && m.time === msg.time)) {
+                return;
+            }
+
+            history.push(msg);
+            if (history.length > 20) history.shift(); 
+
+            renderChatHistory(history, isLobbyChat);
+        }
+
+        function renderChatHistory(messages, isLobby) {
+            const container = isLobby 
+                ? document.getElementById('lobbyChatMessages') 
+                : document.getElementById('gameChatMessages');
+
+            if (!container) return;
+            container.innerHTML = '';
+
+            const cloned = [...messages].reverse();
+
+            cloned.forEach(msg => {
+                const isMe = currentUser && msg.senderUid === currentUser.uid;
+                const msgEl = document.createElement('div');
+                msgEl.className = `p-1 px-2 rounded-lg max-w-[90%] text-[10px] ${isMe ? 'bg-cyan-950/70 border border-cyan-500/20 self-end' : 'bg-slate-900 border border-slate-800'}`;
+                msgEl.innerHTML = `
+                    <span class="font-bold ${isMe ? 'text-cyan-400' : 'text-slate-300'}">${msg.senderName}:</span>
+                    <span class="text-slate-200 select-text">${escapeHTML(msg.text)}</span>
+                `;
+                container.appendChild(msgEl);
+            });
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            );
+        }
+
+        // ==========================================
+        // UI & チャット入力処理
+        // ==========================================
+        const lobbyChatForm = document.getElementById('lobbyChatForm');
+        const lobbyChatInput = document.getElementById('lobbyChatInput');
+        const gameChatOverlay = document.getElementById('gameChatOverlay');
+        const gameChatForm = document.getElementById('gameChatForm');
+        const gameChatInput = document.getElementById('gameChatInput');
+
+        // ロビーチャット送信
+        lobbyChatForm.onsubmit = (e) => {
+            e.preventDefault();
+            const text = lobbyChatInput.value.trim();
+            if (text) {
+                if (!isConfigured) {
+                    showToast("⚠️ Firebaseが未設定です。設定後にチャットが利用できます！");
+                    lobbyChatInput.value = '';
+                    return;
+                }
+                handleChatReceived({
+                    senderUid: currentUser ? currentUser.uid : 'me',
+                    senderName: document.getElementById('nicknameInput').value.trim() || 'SlitherSnake',
+                    text: text,
+                    time: Date.now(),
+                    roomId: 'global'
+                });
+                syncLobbyStatus(text);
+                lobbyChatInput.value = '';
+            }
+        };
+
+        // ゲーム内チャット送信
+        gameChatForm.onsubmit = (e) => {
+            e.preventDefault();
+            const text = gameChatInput.value.trim();
+            if (text) {
+                if (!isConfigured) {
+                    showToast("ローカル対戦中はチャット送信はできません。");
+                    gameChatInput.value = '';
+                    return;
+                }
+                const chatObj = { text: text, time: Date.now() };
+                pendingChatToSend = chatObj;
+                
+                handleChatReceived({
+                    senderUid: currentUser ? currentUser.uid : 'me',
+                    senderName: player.name,
+                    text: text,
+                    time: chatObj.time,
+                    roomId: currentRoomId
+                });
+
+                syncSelfToFirebase();
+                gameChatInput.value = '';
+            }
+        };
+
+        function openGameChat() {
+            if (!isPlaying || isChatActive) return;
+            isChatActive = true;
+
+            if (player) {
+                player.isGhost = true;
+                player.isDashing = false;
+            }
+
+            gameChatOverlay.classList.remove('hidden');
+            setTimeout(() => gameChatInput.focus(), 50);
+        }
+
+        function closeGameChat() {
+            isChatActive = false;
+            if (player) {
+                player.isGhost = false;
+            }
+            gameChatOverlay.classList.add('hidden');
+            canvas.focus();
+        }
+
+        document.getElementById('btnOpenGameChat').onclick = openGameChat;
+        document.getElementById('btnCloseGameChat').onclick = closeGameChat;
+
+        // ==========================================
+        // UIインタラクション ＆ 初期化
+        // ==========================================
+        window.onload = () => {
+            init();
+        };
+
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            minimapCanvas = document.getElementById('minimap');
+            minimapCtx = minimapCanvas.getContext('2d');
+
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            // スキン選択
+            const selector = document.getElementById('skinSelector');
+            SKINS.forEach((skin, idx) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `w-6 h-6 rounded-full border-2 transition-transform active:scale-90 ${idx === 0 ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-60'}`;
+                btn.style.backgroundColor = skin.primary;
+                btn.style.boxShadow = `0 0 6px ${skin.glow}`;
+                btn.title = skin.name;
+                btn.onclick = () => selectSkin(idx, btn);
+                selector.appendChild(btn);
+            });
+
+            // デバイス判定＆チェック
+            const mobileCheckbox = document.getElementById('mobileControlsCheckbox');
+            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            mobileCheckbox.checked = isTouchDevice;
+            useMobileControls = isTouchDevice;
+
+            mobileCheckbox.addEventListener('change', (e) => {
+                useMobileControls = e.target.checked;
+                updateMobileControlsVisibility();
+            });
+
+            // タブ切り替え: ノーマル vs オンライン
+            const tabNormal = document.getElementById('tabNormal');
+            const tabOnline = document.getElementById('tabOnline');
+            const panelNormal = document.getElementById('panelNormal');
+            const panelOnline = document.getElementById('panelOnline');
+
+            tabNormal.onclick = () => {
+                gameMode = 'normal';
+                tabNormal.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
+                tabOnline.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
+                panelNormal.classList.remove('hidden');
+                panelOnline.classList.add('hidden');
+            };
+
+            tabOnline.onclick = () => {
+                gameMode = 'online';
+                tabOnline.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
+                tabNormal.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
+                panelOnline.classList.remove('hidden');
+                panelNormal.classList.add('hidden');
+            };
+
+            // オンラインサブタブ: パブリック vs プライベート
+            const subTabPublic = document.getElementById('subTabPublic');
+            const subTabPrivate = document.getElementById('subTabPrivate');
+            const privateSettingsArea = document.getElementById('privateSettingsArea');
+
+            subTabPublic.onclick = () => {
+                onlineSubMode = 'public';
+                currentRoomId = 'public';
+                subTabPublic.className = "py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow flex-1";
+                subTabPrivate.className = "py-1 text-slate-400 hover:text-white font-bold rounded flex-1";
+                privateSettingsArea.classList.add('hidden');
+            };
+
+            subTabPrivate.onclick = () => {
+                onlineSubMode = 'private';
+                subTabPrivate.className = "py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow flex-1";
+                subTabPublic.className = "py-1 text-slate-400 hover:text-white font-bold rounded flex-1";
+                privateSettingsArea.classList.remove('hidden');
+            };
+
+            // ホスト設定のトグル
+            const roleGuest = document.getElementById('roleGuest');
+            const roleHost = document.getElementById('roleHost');
+            const hostCustomSettings = document.getElementById('hostCustomSettings');
+
+            roleGuest.onchange = () => {
+                isRoomHost = false;
+                hostCustomSettings.classList.add('hidden');
+            };
+            roleHost.onchange = () => {
+                isRoomHost = true;
+                hostCustomSettings.classList.remove('hidden');
+            };
+
+            const cfgWorldSize = document.getElementById('cfgWorldSize');
+            const valWorldSize = document.getElementById('valWorldSize');
+            cfgWorldSize.oninput = () => { valWorldSize.innerText = `${cfgWorldSize.value}x${cfgWorldSize.value}`; };
+
+            const cfgAiCount = document.getElementById('cfgAiCount');
+            const valAiCount = document.getElementById('valAiCount');
+            cfgAiCount.oninput = () => { valAiCount.innerText = `${cfgAiCount.value}匹`; };
+
+            const cfgFoodCount = document.getElementById('cfgFoodCount');
+            const valFoodCount = document.getElementById('valFoodCount');
+            cfgFoodCount.oninput = () => { valFoodCount.innerText = `${cfgFoodCount.value}個`; };
+
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mousedown', handleMouseDown);
+            window.addEventListener('mouseup', handleMouseUp);
+            
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+
+            setupTouchEvents();
+
+            document.getElementById('startButton').addEventListener('click', startGame);
+            document.getElementById('restartButton').addEventListener('click', restartGame);
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            minimapCanvas.width = 112;
+            minimapCanvas.height = 112;
+        }
+
+        function selectSkin(index, element) {
+            selectedSkinIndex = index;
+            const buttons = document.getElementById('skinSelector').children;
+            for (let btn of buttons) {
+                btn.classList.remove('border-white', 'scale-110', 'shadow-lg');
+                btn.classList.add('border-transparent', 'opacity-60');
+            }
+            element.classList.remove('border-transparent', 'opacity-60');
+            element.classList.add('border-white', 'scale-110', 'shadow-lg');
+        }
+
+        function updateMobileControlsVisibility() {
+            const area = document.getElementById('mobileControlsArea');
+            if (isPlaying && useMobileControls) {
+                area.classList.remove('hidden');
+            } else {
+                area.classList.add('hidden');
+            }
+        }
+
+        // ==========================================
+        // ゲームオーバー処理
+        // ==========================================
+        function onGameOver() {
+            isPlaying = false;
+            isChatActive = false;
+            
+            document.getElementById('finalScore').innerText = Math.floor(player.score);
+            document.getElementById('finalKills').innerText = totalKills;
+
+            document.getElementById('hud').classList.add('hidden');
+            updateMobileControlsVisibility(); 
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+
+        async function startGame() {
+            const nickname = document.getElementById('nicknameInput').value.trim() || 'PlayerSnake';
+            const selectedSkin = SKINS[selectedSkinIndex];
+
+            // オンラインモードを選択したがFirebase設定がない場合、親切な案内を出してブロック
+            if (gameMode === 'online' && !isConfigured) {
+                showToast("⚠️ オンラインで遊ぶにはFirebase設定が必要です！プログラム内の'myCustomConfig'に貼り付けてね！");
+                return;
+            }
+
+            snakes = [];
+            foods = [];
+            totalKills = 0;
+            isChatActive = false;
+            pendingChatToSend = null;
+            gameChatHistory.length = 0; 
+
+            keys.up = false;
+            keys.down = false;
+            keys.left = false;
+            keys.right = false;
+            keys.dash = false;
+
+            // 1. 各モード解決
+            if (gameMode === 'online') {
+                if (!isFirebaseConnected) {
+                    showToast("エラー: まだサーバーに接続できていません。");
+                    return;
+                }
+
+                if (onlineSubMode === 'public') {
+                    await resolvePublicRoom();
+                } else {
+                    const passInput = document.getElementById('roomPasswordInput').value.trim();
+                    if (!passInput) {
+                        showToast("プライベート部屋のパスワードを設定してください。");
+                        return;
+                    }
+                    currentRoomId = passInput;
+                    document.getElementById('roomDisplay').innerText = `ROOM: ${passInput} (PRIVATE)`;
+                    
+                    if (isRoomHost) {
+                        WORLD_SIZE = parseInt(document.getElementById('cfgWorldSize').value);
+                        AI_COUNT = parseInt(document.getElementById('cfgAiCount').value);
+                        FOOD_COUNT = parseInt(document.getElementById('cfgFoodCount').value);
+                        showToast(`ホストとして部屋「${passInput}」を立ち上げました。`);
+                    } else {
+                        WORLD_SIZE = 4000;
+                        AI_COUNT = 25;
+                        FOOD_COUNT = 800;
+                        showToast(`部屋「${passInput}」に入室中。ホストの接続を待っています。`);
+                    }
+                }
+
+                setupMultiplayerSubscription();
+                document.getElementById('rankingTitle').innerText = "オンラインランキング";
+            } else {
+                currentRoomId = 'local';
+                WORLD_SIZE = 4000;
+                AI_COUNT = 25; 
+                FOOD_COUNT = 800;
+                document.getElementById('roomDisplay').innerText = "LOCAL PLAY (AI)";
+                document.getElementById('rankingTitle').innerText = "ローカルランキング";
+            }
+
+            // 2. プレイヤー生成
+            const playerX = WORLD_SIZE / 2 + (Math.random() - 0.5) * 500;
+            const playerY = WORLD_SIZE / 2 + (Math.random() - 0.5) * 500;
+            player = new Snake('player', nickname, playerX, playerY, selectedSkin, false);
+            snakes.push(player);
+
+            spawnAIs(AI_COUNT);
+            spawnFoods(FOOD_COUNT);
+            spawnSpecialFoods(SPECIAL_FOOD_COUNT);
+
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+
+            isPlaying = true;
+            updateMobileControlsVisibility();
+
+            if (gameMode === 'online') {
+                showToast("オンラインゲーム開始！ [Enter]キーでチャット＆一時停止ができます。");
+            } else {
+                showToast("シングルゲーム開始！ [Enter]キーで一時停止ができます。");
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function restartGame() {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('startScreen').classList.remove('hidden');
+        }
+
+        // ==========================================
+        // スポーンロジック
+        // ==========================================
+        function spawnAIs(count) {
+            for (let i = 0; i < count; i++) {
+                const id = 'ai_' + Math.random().toString(36).substr(2, 9);
+                const name = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)] + ' (AI)';
+                
+                const rx = Math.random() * (WORLD_SIZE - 200) + 100;
+                const ry = Math.random() * (WORLD_SIZE - 200) + 100;
+                const skin = SKINS[Math.floor(Math.random() * SKINS.length)];
+                
+                const aiSnake = new Snake(id, name, rx, ry, skin, true);
+                
+                const sizeRoll = Math.random();
+                if (sizeRoll > 0.95) {
+                    aiSnake.score = Math.floor(Math.random() * 500) + 400; 
+                } else if (sizeRoll > 0.8) {
+                    aiSnake.score = Math.floor(Math.random() * 200) + 180;
+                } else {
+                    aiSnake.score = Math.floor(Math.random() * 50) + 100;
+                }
+
+                const initLen = Math.floor(10 + (aiSnake.score - 100) / 4);
+                aiSnake.body = [];
+                for(let k=0; k<initLen; k++){
+                    aiSnake.body.push({x: rx, y: ry});
+                }
+
+                snakes.push(aiSnake);
+            }
+        }
+
+        function spawnFoods(count) {
+            for (let i = 0; i < count; i++) {
+                const rx = Math.random() * (WORLD_SIZE - 40) + 20;
+                const ry = Math.random() * (WORLD_SIZE - 40) + 20;
+                const val = Math.floor(Math.random() * 3) + 1;
+                foods.push(new Food(rx, ry, val, false));
+            }
+        }
+
+        function spawnSpecialFoods(count) {
+            for (let i = 0; i < count; i++) {
+                const rx = Math.random() * (WORLD_SIZE - 40) + 20;
+                const ry = Math.random() * (WORLD_SIZE - 40) + 20;
+                const val = Math.floor(Math.random() * 10) + 8;
+                foods.push(new Food(rx, ry, val, false));
+            }
+        }
+
+        // ==========================================
+        // 入力ハンドラー
+        // ==========================================
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        function handleMouseMove(e) {
+            if (!isPlaying || !player || player.isDead || isChatActive) return;
+
+            const movementX = Math.abs(e.clientX - lastMouseX);
+            const movementY = Math.abs(e.clientY - lastMouseY);
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+
+            if (movementX < 2 && movementY < 2) return;
+
+            if (keys.left || keys.right) return;
+
+            if (useMobileControls && joystickActive) return;
+
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            const dx = e.clientX - centerX;
+            const dy = e.clientY - centerY;
+
+            player.targetAngle = Math.atan2(dy, dx);
+        }
+
+        function handleMouseDown(e) {
+            if (!isPlaying || !player || player.isDead || isChatActive) return;
+            if (e.button === 0) {
+                player.isDashing = true;
+            }
+        }
+
+        function handleMouseUp(e) {
+            if (!isPlaying || !player || player.isDead || isChatActive) return;
+            if (e.button === 0) {
+                player.isDashing = false;
+            }
+        }
+
+        function handleKeyDown(e) {
+            if (!isPlaying || !player || player.isDead) return;
+
+            if (e.code === 'Enter') {
+                e.preventDefault();
+                if (isChatActive) {
+                    const txt = gameChatInput.value;
+                    if (txt.trim()) {
+                        const chatObj = { text: txt.trim(), time: Date.now() };
+                        pendingChatToSend = chatObj;
+                        
+                        handleChatReceived({
+                            senderUid: currentUser ? currentUser.uid : 'me',
+                            senderName: player.name,
+                            text: txt.trim(),
+                            time: chatObj.time,
+                            roomId: currentRoomId
+                        });
+
+                        syncSelfToFirebase();
+                        gameChatInput.value = '';
+                    } else {
+                        closeGameChat();
+                    }
+                } else {
+                    openGameChat();
+                }
+                return;
+            }
+
+            if (isChatActive) return;
+
+            switch (e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    keys.up = true;
+                    player.isDashing = true; 
+                    e.preventDefault();
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    keys.down = true; 
+                    player.isDashing = false;
+                    e.preventDefault();
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    keys.left = true;
+                    e.preventDefault();
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    keys.right = true;
+                    e.preventDefault();
+                    break;
+                case 'Space':
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    keys.dash = true;
+                    player.isDashing = true;
+                    e.preventDefault();
+                    break;
+            }
+        }
+
+        function handleKeyUp(e) {
+            if (!isPlaying || !player || player.isDead || isChatActive) return;
+
+            switch (e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    keys.up = false;
+                    if (!keys.dash) player.isDashing = false;
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    keys.down = false;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    keys.left = false;
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    keys.right = false;
+                    break;
+                case 'Space':
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    keys.dash = false;
+                    if (!keys.up) player.isDashing = false;
+                    break;
+            }
+        }
+
+        function updatePlayerAngleFromKeysContinuous() {
+            if (!player || player.isDead || isChatActive) return;
+
+            const turnRate = 0.055; 
+
+            if (keys.left) {
+                player.targetAngle -= turnRate;
+            }
+            if (keys.right) {
+                player.targetAngle += turnRate;
+            }
+
+            while (player.targetAngle < -Math.PI) player.targetAngle += Math.PI * 2;
+            while (player.targetAngle > Math.PI) player.targetAngle -= Math.PI * 2;
+        }
+
+        // ==========================================
+        // タッチ操作（モバイル）対応
+        // ==========================================
+        function setupTouchEvents() {
+            const joystickZone = document.getElementById('joystickZone');
+            const joystickKnob = document.getElementById('joystickKnob');
+            const dashButton = document.getElementById('dashButton');
+
+            joystickZone.addEventListener('touchstart', (e) => {
+                if (!useMobileControls || isChatActive) return;
+                joystickActive = true;
+                const touch = e.touches[0];
+                const rect = joystickZone.getBoundingClientRect();
+                joystickStart.x = rect.left + rect.width / 2;
+                joystickStart.y = rect.top + rect.height / 2;
+
+                updateJoystick(touch);
+                e.preventDefault();
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!useMobileControls || !joystickActive || isChatActive) return;
+                
+                for (let i = 0; i < e.touches.length; i++) {
+                    const touch = e.touches[i];
+                    if (touch.clientX < window.innerWidth * 0.6) {
+                        updateJoystick(touch);
+                        break;
+                    }
+                }
+            }, { passive: true });
+
+            window.addEventListener('touchend', (e) => {
+                if (!useMobileControls || !joystickActive) return;
+
+                let leftTouchStillExists = false;
+                for (let i = 0; i < e.touches.length; i++) {
+                    if (e.touches[i].clientX < window.innerWidth * 0.6) {
+                        leftTouchStillExists = true;
+                    }
+                }
+
+                if (!leftTouchStillExists) {
+                    joystickActive = false;
+                    joystickKnob.style.transform = `translate(0px, 0px)`;
+                }
+            });
+
+            function updateJoystick(touch) {
+                if (!player || player.isDead) return;
+
+                const dx = touch.clientX - joystickStart.x;
+                const dy = touch.clientY - joystickStart.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const maxRadius = 45;
+
+                let targetX = dx;
+                let targetY = dy;
+
+                if (dist > maxRadius) {
+                    const angle = Math.atan2(dy, dx);
+                    targetX = Math.cos(angle) * maxRadius;
+                    targetY = Math.sin(angle) * maxRadius;
+                }
+
+                joystickKnob.style.transform = `translate(${targetX}px, ${targetY}px)`;
+                player.targetAngle = Math.atan2(dy, dx);
+            }
+
+            dashButton.addEventListener('touchstart', (e) => {
+                if (!useMobileControls || isChatActive) return;
+                isMobileDashing = true;
+                if (player) player.isDashing = true;
+                e.preventDefault();
+            });
+
+            dashButton.addEventListener('touchend', (e) => {
+                if (!useMobileControls) return;
+                isMobileDashing = false;
+                if (player) player.isDashing = false;
+                e.preventDefault();
+            });
+        }
+
+        function showToast(text) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastText').innerText = text;
+            toast.style.opacity = '1';
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 3500);
+        }
+
+        // ==========================================
+        // コリジョン判定
+        // ==========================================
+        function checkCollisions() {
+            if (!player || player.isDead) return;
+
+            const aliveSnakes = snakes.filter(s => !s.isDead);
+
+            // 1. エサの捕食判定
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const f = foods[i];
+                
+                for (const snake of aliveSnakes) {
+                    if (snake.isGhost) continue;
+
+                    const head = snake.body[0];
+                    if (!head) continue;
+
+                    const dx = f.x - head.x;
+                    const dy = f.y - head.y;
+                    
+                    const maxDist = (snake.width / 2) + f.radius;
+                    if (Math.abs(dx) > maxDist || Math.abs(dy) > maxDist) {
+                        continue; 
+                    }
+
+                    const distSq = dx * dx + dy * dy;
+                    const collisionDistSq = maxDist * maxDist;
+
+                    if (distSq < collisionDistSq) {
+                        snake.score += f.value;
+                        foods.splice(i, 1);
+
+                        if (snake.id === 'player') {
+                            document.getElementById('scoreDisplay').innerText = Math.floor(player.score);
+                        }
+                        break; 
+                    }
+                }
+            }
+
+            // 2. 他のヘビへの自滅衝突判定
+            for (let i = 0; i < snakes.length; i++) {
+                const s1 = snakes[i];
+                if (s1.isDead || s1.isGhost || s1.isRemote) continue; 
+
+                const head1 = s1.body[0];
+                if (!head1) continue;
+
+                for (let j = 0; j < snakes.length; j++) {
+                    const s2 = snakes[j];
+                    if (s2.isDead || s2.isGhost || s1.id === s2.id) continue;
+
+                    const approxS2Length = s2.body.length * 4; 
+                    const headToHeadDistSq = (head1.x - s2.x) * (head1.x - s2.x) + (head1.y - s2.y) * (head1.y - s2.y);
+                    const safeRadius = approxS2Length + 100;
+                    if (headToHeadDistSq > safeRadius * safeRadius) {
+                        continue; 
+                    }
+
+                    const s1HalfWidth = s1.width / 2;
+                    const s2HalfWidth = s2.width / 2;
+                    const collisionDist = s1HalfWidth + s2HalfWidth * 0.95;
+                    const collisionDistSq = collisionDist * collisionDist;
+
+                    for (let k = 0; k < s2.body.length; k++) {
+                        const segment = s2.body[k];
+                        if (!segment) continue;
+                        const dx = head1.x - segment.x;
+                        const dy = head1.y - segment.y;
+
+                        if (Math.abs(dx) > collisionDist || Math.abs(dy) > collisionDist) {
+                            continue;
+                        }
+
+                        const distSq = dx * dx + dy * dy;
+
+                        if (distSq < collisionDistSq) {
+                            s1.die();
+
+                            if (s1.id === 'player') {
+                                onGameOver();
+                            } else {
+                                setTimeout(() => {
+                                    if (isPlaying) {
+                                        snakes = snakes.filter(s => !s.isDead);
+                                        spawnAIs(1);
+                                    }
+                                }, 2000);
+                            }
+
+                            if (s2.id === 'player') {
+                                totalKills++;
+                                showToast(`敵のヘビを撃破しました！ (+1キル)`);
+                            }
+                            break;
+                        }
+                    }
+                    if (s1.isDead) break;
+                }
+            }
+        }
+
+        // ==========================================
+        // UI & ミニマップ更新
+        // ==========================================
+        function updateUI() {
+            const aliveSnakes = snakes.filter(s => !s.isDead);
+            aliveSnakes.sort((a, b) => b.score - a.score);
+
+            const listElement = document.getElementById('leaderboardList');
+            listElement.innerHTML = '';
+
+            const maxBoard = Math.min(aliveSnakes.length, 7);
+            for (let i = 0; i < maxBoard; i++) {
+                const s = aliveSnakes[i];
+                const li = document.createElement('li');
+                li.className = `flex justify-between items-center py-0.5 ${s.id === 'player' ? 'text-cyan-400 font-bold' : 'text-slate-300'}`;
+                
+                const rankText = `<span class="opacity-50 mr-1">#${i+1}</span>`;
+                const cleanName = s.name.length > 11 ? s.name.substring(0, 10) + '..' : s.name;
+                
+                li.innerHTML = `
+                    <span>${rankText}${cleanName}${s.isGhost ? ' <span class="text-[8px] text-amber-500 font-bold text-center">CHAT</span>' : ''}</span>
+                    <span class="font-mono text-[11px]">${Math.floor(s.score)}</span>
+                `;
+                listElement.appendChild(li);
+            }
+
+            if (player && !player.isDead) {
+                const myRank = aliveSnakes.findIndex(s => s.id === 'player') + 1;
+                document.getElementById('rankDisplay').innerText = `順位: ${myRank} / ${aliveSnakes.length}`;
+            }
+
+            // ミニマップ
+            minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            const ratio = minimapCanvas.width / WORLD_SIZE;
+
+            for (const s of aliveSnakes) {
+                if (s.id === 'player') continue;
+                minimapCtx.fillStyle = s.isRemote ? 'rgba(56, 189, 248, 0.8)' : 'rgba(239, 68, 68, 0.6)';
+                minimapCtx.beginPath();
+                const sRadius = Math.min(5, Math.max(1.5, 1.5 + (s.score - 100) * 0.005));
+                minimapCtx.arc(s.x * ratio, s.y * ratio, sRadius, 0, Math.PI*2);
+                minimapCtx.fill();
+            }
+
+            if (player && !player.isDead) {
+                minimapCtx.fillStyle = player.isGhost ? 'rgba(34, 211, 238, 0.4)' : '#22d3ee';
+                minimapCtx.beginPath();
+                const pRadius = Math.min(8, Math.max(3.5, 3.5 + (player.score - 100) * 0.005));
+                minimapCtx.arc(player.x * ratio, player.y * ratio, pRadius, 0, Math.PI*2);
+                minimapCtx.fill();
+            }
+        }
+
+        // ==========================================
+        // メインゲームループ
+        // ==========================================
+        function gameLoop() {
+            if (!isPlaying) return;
+
+            updatePlayerAngleFromKeysContinuous();
+
+            if (gameMode === 'online') {
+                interpolateRemoteSnakes();
+            }
+
+            snakes.forEach(s => s.update());
+            
+            const activeSnakes = snakes.filter(s => !s.isDead);
+            foods.forEach(f => f.update(activeSnakes));
+
+            checkCollisions();
+
+            if (gameMode === 'online') {
+                syncSelfToFirebase();
+            }
+
+            if (foods.length < FOOD_COUNT) {
+                spawnFoods(2); 
+            }
+
+            let cameraX = WORLD_SIZE / 2;
+            let cameraY = WORLD_SIZE / 2;
+            if (player && !player.isDead) {
+                cameraX = player.x;
+                cameraY = player.y;
+            }
+
+            let zoom = 1.0;
+            if (player && !player.isDead) {
+                zoom = Math.max(0.65, 1.0 - (player.width - 12) * 0.012);
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawGrid(ctx, cameraX, cameraY, zoom);
+
+            foods.forEach(f => f.draw(ctx, cameraX, cameraY, zoom));
+
+            const sortedSnakesForDraw = [...snakes].sort((a, b) => {
+                if (a.id === 'player') return 1;
+                if (b.id === 'player') return -1;
+                return a.score - b.score;
+            });
+            sortedSnakesForDraw.forEach(s => s.draw(ctx, cameraX, cameraY, zoom));
+
+            drawWorldBounds(ctx, cameraX, cameraY, zoom);
+
+            updateUI();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function drawWorldBounds(ctx, cameraX, cameraY, zoom) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+            ctx.lineWidth = 10 * zoom;
+            
+            const x0 = (0 - cameraX) * zoom + window.innerWidth / 2;
+            const y0 = (0 - cameraY) * zoom + window.innerHeight / 2;
+            const x1 = (WORLD_SIZE - cameraX) * zoom + window.innerWidth / 2;
+            const y1 = (WORLD_SIZE - cameraY) * zoom + window.innerHeight / 2;
+
+            ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+            ctx.restore();
+        }
+
+        function drawGrid(ctx, cameraX, cameraY, zoom) {
+            ctx.save();
+            ctx.strokeStyle = '#1a2236'; 
+            ctx.lineWidth = 0.5 * zoom;
+
+            const step = GRID_SIZE * zoom;
+            const offsetX = (window.innerWidth / 2 - cameraX * zoom) % step;
+            const offsetY = (window.innerHeight / 2 - cameraY * zoom) % step;
+
+            ctx.beginPath();
+            
+            for (let x = offsetX; x < window.innerWidth; x += step) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, window.innerHeight);
+            }
+
+            for (let y = offsetY; y < window.innerHeight; y += step) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(window.innerWidth, y);
+            }
+
+            ctx.stroke(); 
+            ctx.restore();
+        }
+    </script>
+</body>
+</html>
