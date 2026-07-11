@@ -399,6 +399,15 @@
 
         initAuth();
 
+        // 突然ウィンドウを閉じたりリロードしたときの退室処理 (幽霊ヘビが残るバグを解消)
+        window.addEventListener('beforeunload', () => {
+            if (currentUser && isConfigured && db) {
+                const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
+                // 同期的に確実にデータを消すために、空にするか削除する
+                setDoc(playerDocRef, { isDead: true, lastUpdated: 0 }).catch(e => console.error(e));
+            }
+        });
+
         // ==========================================
         // 定数 & 動的ゲーム設定値
         // ==========================================
@@ -788,7 +797,7 @@
 
                 if (this.id === 'player' && gameMode === 'online' && currentUser && isConfigured) {
                     const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
-                    deleteDoc(playerDocRef).catch(e => console.error(e));
+                    setDoc(playerDocRef, { isDead: true, lastUpdated: Date.now() }).catch(e => console.error(e));
                 }
             }
         }
@@ -915,14 +924,15 @@
             if (now - lastSyncTime < SYNC_INTERVAL) return;
             lastSyncTime = now;
 
-            const simplifiedBody = player.body.slice(0, 30).map(part => ({
+            // 制限を解除し、ヘビのすべての体のパーツ座標（体全体の情報）をサーバーに送信
+            const simplifiedBody = player.body.map(part => ({
                 x: Math.round(part.x),
                 y: Math.round(part.y)
             }));
 
             const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
             
-            // 送信ペイロードの組み立て
+            // 送信ペイロードの組み立て（すべての情報をサーバーに送れるように構成）
             const payload = {
                 uid: currentUser.uid,
                 roomId: currentRoomId, 
@@ -948,7 +958,7 @@
                 };
             }
 
-            // 最新のチャットメッセージがあれば、それを乗せる
+            // 最新のチャットメッセージがあれば、それも完璧に乗せる
             if (pendingChatToSend) {
                 payload.lastChat = pendingChatToSend;
             }
@@ -1054,7 +1064,7 @@
 
                     if (id === currentUser.uid) return; 
 
-                    if (change.type === 'removed' || (data && data.isDead && isPlaying)) {
+                    if (change.type === 'removed' || (data && data.isDead)) {
                         removeRemoteSnake(id);
                     } else if (data) {
                         if (Date.now() - data.lastUpdated > 5000) {
@@ -1089,7 +1099,7 @@
                     }
                 });
 
-                // 🌟 インデックス設定が不要な全プレイヤー走査による安全な部屋リスト再構築 🌟
+                // インデックス設定が不要な全プレイヤー走査による安全な部屋リスト再構築
                 snapshot.forEach(docSnap => {
                     const d = docSnap.data();
                     // 他のプレイヤーがホスト用の設定（hostConfig）を持っており、6秒以内に更新されている場合に部屋リストに表示する
@@ -1131,7 +1141,7 @@
             }
         }
 
-        // 退室・削除用の安全なフィルター修正 (バグを完全解消)
+        // 退室・削除用の安全なフィルター
         function removeRemoteSnake(id) {
             snakes = snakes.filter(s => s.id !== id);
         }
@@ -1714,24 +1724,6 @@
                 }
 
                 snakes.push(aiSnake);
-            }
-        }
-
-        function spawnFoods(count) {
-            for (let i = 0; i < count; i++) {
-                const rx = Math.random() * (WORLD_SIZE - 40) + 20;
-                const ry = Math.random() * (WORLD_SIZE - 40) + 20;
-                const val = Math.floor(Math.random() * 3) + 1;
-                foods.push(new Food(rx, ry, val, false));
-            }
-        }
-
-        function spawnSpecialFoods(count) {
-            for (let i = 0; i < count; i++) {
-                const rx = Math.random() * (WORLD_SIZE - 40) + 20;
-                const ry = Math.random() * (WORLD_SIZE - 40) + 20;
-                const val = Math.floor(Math.random() * 10) + 8;
-                foods.push(new Food(rx, ry, val, false));
             }
         }
 
