@@ -908,7 +908,6 @@
 
         // ==========================================
         // オンラインマルチプレイヤー同期ロジック (Firestore)
-        // 許可されている players パスのみに統合！
         // ==========================================
         let lastSyncTime = 0;
         const SYNC_INTERVAL = 250; 
@@ -1057,6 +1056,9 @@
             unsubscribePlayers = onSnapshot(playersCol, (snapshot) => {
                 const rawRooms = [];
                 const now = Date.now();
+                let matchingRoomParticipants = 0; // 選択中のプライベート部屋にいる他の人数
+
+                const activeRoomPass = document.getElementById('roomPasswordInput').value.trim();
 
                 snapshot.docChanges().forEach((change) => {
                     const id = change.doc.id;
@@ -1099,10 +1101,14 @@
                     }
                 });
 
-                // インデックス設定が不要な全プレイヤー走査による安全な部屋リスト再構築
+                // インデックス設定が不要な全プレイヤー走査
                 snapshot.forEach(docSnap => {
                     const d = docSnap.data();
-                    // 他のプレイヤーがホスト用の設定（hostConfig）を持っており、6秒以内に更新されている場合に部屋リストに表示する
+                    const id = docSnap.id;
+
+                    if (id === currentUser.uid) return;
+
+                    // 部屋リスト抽出用：他のプレイヤーがホスト用の設定（hostConfig）を持っており、かつオンラインアピール中の場合
                     if (d && d.hostConfig && d.roomId !== 'global' && d.roomId !== 'public' && (now - d.lastUpdated < 6000)) {
                         rawRooms.push({
                             id: d.roomId,
@@ -1111,7 +1117,45 @@
                             foodCount: d.hostConfig.foodCount
                         });
                     }
+
+                    // 🌟 部屋に入ったら自動スタートするための参加者数チェック 🌟
+                    // 自分がまだスタート画面（ロビー）にいる場合で、相手が同じプライベート部屋に接続してきたか判定
+                    if (!isPlaying && gameMode === 'online' && onlineSubMode === 'private' && activeRoomPass) {
+                        if (d && d.roomId === activeRoomPass && (now - d.lastUpdated < 5000)) {
+                            matchingRoomParticipants++;
+
+                            // 🌟 ホストまたはゲストの誰かが部屋に合流したら、自動的にロビーからゲームをスタートする 🌟
+                            if (isRoomHost && matchingRoomParticipants >= 1) {
+                                // 誰かが来た！
+                                console.log("他のプレイヤーの合流を検知。自動的にスタートします！");
+                                showToast(`🎮 友達（${d.name || 'ゲスト'}）が部屋に合流しました！自動スタートします！`);
+                                
+                                // 数秒ディレイ後にゲームを開始
+                                setTimeout(() => {
+                                    if (!isPlaying) {
+                                        startGame();
+                                    }
+                                }, 1500);
+                            } else if (!isRoomHost && d.hostConfig && d.roomId === activeRoomPass) {
+                                // 自分がゲストで、ホストが部屋設定情報（hostConfig）を持った状態で接続されているのを発見したとき
+                                // ホストの設定（世界の広さ・エサ最大数）を同期受信して自動的に即時適用する
+                                WORLD_SIZE = d.hostConfig.worldSize || 4000;
+                                AI_COUNT = d.hostConfig.aiCount || 25;
+                                FOOD_COUNT = d.hostConfig.foodCount || 800;
+                                
+                                console.log(`ホストから部屋情報を受信適用: ${WORLD_SIZE}x${WORLD_SIZE}`);
+                                showToast(`📶 ホスト（${d.name}）の部屋情報を受信しました。合流します！`);
+
+                                setTimeout(() => {
+                                    if (!isPlaying) {
+                                        startGame();
+                                    }
+                                }, 1500);
+                            }
+                        }
+                    }
                 });
+
                 renderLobbyRooms(rawRooms);
 
             }, (error) => {
@@ -1200,7 +1244,7 @@
                         </div>
                     </div>
                     <div class="text-right">
-                        <span class="text-[9px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700 font-semibold">選択</span>
+                        <span class="text-[9px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700 font-semibold">合流</span>
                     </div>
                 `;
                 item.onclick = () => {
@@ -1209,9 +1253,14 @@
                     document.getElementById('hostCustomSettings').classList.add('hidden');
                     isRoomHost = false;
                     
+                    // 部屋設定（世界の広さ等）をリストからクリック時に受信して一時適用
+                    WORLD_SIZE = room.worldSize || 4000;
+                    AI_COUNT = room.aiCount || 25;
+                    FOOD_COUNT = room.foodCount || 800;
+
                     // 部屋切り替え時に設定アピールを更新
                     syncLobbyStatus();
-                    showToast(`部屋「${room.id}」を選択しました！`);
+                    showToast(`部屋「${room.id}」を選択しました！ホストの開始を待ちます...`);
                 };
                 listContainer.appendChild(item);
             });
@@ -1593,6 +1642,8 @@
         }
 
         async function startGame() {
+            if (isPlaying) return; // 二重スタート防止
+
             const nickname = document.getElementById('nicknameInput').value.trim() || 'PlayerSnake';
             const selectedSkin = SKINS[selectedSkinIndex];
 
@@ -1640,12 +1691,10 @@
                         WORLD_SIZE = parseInt(document.getElementById('cfgWorldSize').value);
                         AI_COUNT = parseInt(document.getElementById('cfgAiCount').value);
                         FOOD_COUNT = parseInt(document.getElementById('cfgFoodCount').value);
-                        showToast(`ホストとして部屋「${passInput}」を立ち上げました。`);
+                        showToast(`ホストとして部屋「${passInput}」を開始しました！`);
                     } else {
-                        WORLD_SIZE = 4000;
-                        AI_COUNT = 25;
-                        FOOD_COUNT = 800;
-                        showToast(`部屋「${passInput}」に入室中。ホストの接続を待っています。`);
+                        // ゲストの場合は、すでに受信したホストの設定が変数に適用されています
+                        showToast(`部屋「${passInput}」に合流して対戦を開始します！`);
                     }
                 }
 
@@ -1724,6 +1773,24 @@
                 }
 
                 snakes.push(aiSnake);
+            }
+        }
+
+        function spawnFoods(count) {
+            for (let i = 0; i < count; i++) {
+                const rx = Math.random() * (WORLD_SIZE - 40) + 20;
+                const ry = Math.random() * (WORLD_SIZE - 40) + 20;
+                const val = Math.floor(Math.random() * 3) + 1;
+                foods.push(new Food(rx, ry, val, false));
+            }
+        }
+
+        function spawnSpecialFoods(count) {
+            for (let i = 0; i < count; i++) {
+                const rx = Math.random() * (WORLD_SIZE - 40) + 20;
+                const ry = Math.random() * (WORLD_SIZE - 40) + 20;
+                const val = Math.floor(Math.random() * 10) + 8;
+                foods.push(new Food(rx, ry, val, false));
             }
         }
 
