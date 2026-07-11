@@ -13,7 +13,7 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background-color: #0b0f19;
+            background-color: #05070f;
             user-select: none;
             -webkit-user-select: none;
             touch-action: none;
@@ -253,8 +253,8 @@
 
         <!-- 右下: ミニマップ -->
         <div class="absolute bottom-4 right-4 bg-slate-900/80 border border-slate-700/50 p-2 rounded-xl text-white backdrop-blur-sm pointer-events-auto flex flex-col items-center">
-            <canvas id="minimap" class="w-28 h-28 bg-slate-950/50 rounded-lg border border-slate-800"></canvas>
-            <span class="text-[10px] text-slate-400 mt-1">ミニマップ</span>
+            <canvas id="minimap" class="w-28 h-28 bg-slate-950/70 rounded-full border-2 border-slate-800/80 shadow-lg shadow-cyan-500/10"></canvas>
+            <span class="text-[10px] text-slate-400 mt-1"><i class="fa-solid fa-compass mr-1 animate-spin-slow"></i>レーダーマップ</span>
         </div>
 
         <!-- モバイル用ジョイスティック＆ダッシュボタンエリア -->
@@ -554,30 +554,23 @@
                 this.x += Math.cos(this.angle) * this.speed;
                 this.y += Math.sin(this.angle) * this.speed;
 
-                const margin = 50;
-                if (this.x < margin) { 
-                    this.x = margin; 
-                    if (Math.cos(this.targetAngle) < 0) {
-                        this.targetAngle = Math.atan2(Math.sin(this.targetAngle), 0.1); 
-                    }
-                }
-                if (this.x > WORLD_SIZE - margin) { 
-                    this.x = WORLD_SIZE - margin; 
-                    if (Math.cos(this.targetAngle) > 0) {
-                        this.targetAngle = Math.atan2(Math.sin(this.targetAngle), -0.1); 
-                    }
-                }
-                if (this.y < margin) { 
-                    this.y = margin; 
-                    if (this.targetAngle && Math.sin(this.targetAngle) < 0) {
-                        this.targetAngle = Math.atan2(0.1, Math.cos(this.targetAngle)); 
-                    }
-                }
-                if (this.y > WORLD_SIZE - margin) { 
-                    this.y = WORLD_SIZE - margin; 
-                    if (this.targetAngle && Math.sin(this.targetAngle) > 0) {
-                        this.targetAngle = Math.atan2(-0.1, Math.cos(this.targetAngle)); 
-                    }
+                // 🌟 本家同様の「円形マップ」境界線物理判定 🌟
+                const centerX = WORLD_SIZE / 2;
+                const centerY = WORLD_SIZE / 2;
+                const maxRadius = (WORLD_SIZE / 2) - 40; // マップ外枠から40px手前
+
+                const dxFromCenter = this.x - centerX;
+                const dyFromCenter = this.y - centerY;
+                const distFromCenter = Math.sqrt(dxFromCenter * dxFromCenter + dyFromCenter * dyFromCenter);
+
+                if (distFromCenter > maxRadius) {
+                    // 円形境界にぶつかった場合、内側に滑らかに押し戻す＆軌道を内側に向ける
+                    const angleToCenter = Math.atan2(-dyFromCenter, -dxFromCenter);
+                    this.x = centerX + Math.cos(angleToCenter) * -maxRadius;
+                    this.y = centerY + Math.sin(angleToCenter) * -maxRadius;
+                    
+                    // 進行方向も強制的に内側に向かせる
+                    this.targetAngle = angleToCenter + (Math.random() - 0.5) * 0.5;
                 }
 
                 this.body.unshift({ x: this.x, y: this.y });
@@ -868,8 +861,21 @@
                         this.angle += (Math.random() - 0.5) * 1.5;
                     }
 
-                    this.x = Math.max(20, Math.min(WORLD_SIZE - 20, this.x));
-                    this.y = Math.max(20, Math.min(WORLD_SIZE - 20, this.y));
+                    // 🌟 円形マップ境界の内側にエサを制限 🌟
+                    const centerX = WORLD_SIZE / 2;
+                    const centerY = WORLD_SIZE / 2;
+                    const maxRadius = (WORLD_SIZE / 2) - 30;
+
+                    const dxFromCenter = this.x - centerX;
+                    const dyFromCenter = this.y - centerY;
+                    const distFromCenter = Math.sqrt(dxFromCenter * dxFromCenter + dyFromCenter * dyFromCenter);
+
+                    if (distFromCenter > maxRadius) {
+                        const angle = Math.atan2(dyFromCenter, dxFromCenter);
+                        this.x = centerX + Math.cos(angle) * (maxRadius - 10);
+                        this.y = centerY + Math.sin(angle) * (maxRadius - 10);
+                        this.angle = angle + Math.PI; // 逆方向に反転
+                    }
                 }
             }
 
@@ -1787,8 +1793,15 @@
                 const id = 'ai_' + Math.random().toString(36).substr(2, 9);
                 const name = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)] + ' (AI)';
                 
-                const rx = Math.random() * (WORLD_SIZE - 200) + 100;
-                const ry = Math.random() * (WORLD_SIZE - 200) + 100;
+                // 🌟 円形マップ内にAIを出現させる 🌟
+                const centerX = WORLD_SIZE / 2;
+                const centerY = WORLD_SIZE / 2;
+                const spawnRadius = (WORLD_SIZE / 2) - 150;
+                const spawnAngle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * spawnRadius;
+
+                const rx = centerX + Math.cos(spawnAngle) * dist;
+                const ry = centerY + Math.sin(spawnAngle) * dist;
                 const skin = SKINS[Math.floor(Math.random() * SKINS.length)];
                 
                 const aiSnake = new Snake(id, name, rx, ry, skin, true);
@@ -1813,379 +1826,46 @@
         }
 
         function spawnFoods(count) {
+            const centerX = WORLD_SIZE / 2;
+            const centerY = WORLD_SIZE / 2;
+            const maxRadius = (WORLD_SIZE / 2) - 50;
+
             for (let i = 0; i < count; i++) {
-                const rx = Math.random() * (WORLD_SIZE - 40) + 20;
-                const ry = Math.random() * (WORLD_SIZE - 40) + 20;
+                // 🌟 円形マップ内にきれいにエサを配置する 🌟
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.sqrt(Math.random()) * maxRadius; // 外側にも均等に散らばるように平方根を使用
+
+                const rx = centerX + Math.cos(angle) * dist;
+                const ry = centerY + Math.sin(angle) * dist;
                 const val = Math.floor(Math.random() * 3) + 1;
                 foods.push(new Food(rx, ry, val, false));
             }
         }
 
         function spawnSpecialFoods(count) {
+            const centerX = WORLD_SIZE / 2;
+            const centerY = WORLD_SIZE / 2;
+            const maxRadius = (WORLD_SIZE / 2) - 50;
+
             for (let i = 0; i < count; i++) {
-                const rx = Math.random() * (WORLD_SIZE - 40) + 20;
-                const ry = Math.random() * (WORLD_SIZE - 40) + 20;
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.sqrt(Math.random()) * maxRadius;
+
+                const rx = centerX + Math.cos(angle) * dist;
+                const ry = centerY + Math.sin(angle) * dist;
                 const val = Math.floor(Math.random() * 10) + 8;
                 foods.push(new Food(rx, ry, val, false));
             }
         }
 
         // ==========================================
-        // 入力ハンドラー
+        // インゲームHUD（ミニマップ）描画
         // ==========================================
-        let lastMouseX = 0;
-        let lastMouseY = 0;
-
-        function handleMouseMove(e) {
-            if (!isPlaying || !player || player.isDead || isChatActive) return;
-
-            const movementX = Math.abs(e.clientX - lastMouseX);
-            const movementY = Math.abs(e.clientY - lastMouseY);
-            lastMouseX = e.clientX;
-            lastMouseY = e.clientY;
-
-            if (movementX < 2 && movementY < 2) return;
-
-            if (keys.left || keys.right) return;
-
-            if (useMobileControls && joystickActive) return;
-
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
-
-            const dx = e.clientX - centerX;
-            const dy = e.clientY - centerY;
-
-            player.targetAngle = Math.atan2(dy, dx);
-        }
+        // updateUI() 内で呼び出されます
 
         // ==========================================
-        // クリック/タップ（加速開始）
+        // コリジョン判定は既存
         // ==========================================
-        function handleMouseDown(e) {
-            if (!isPlaying || !player || player.isDead || isChatActive) return;
-            if (e.button === 0) {
-                player.isDashing = true;
-            }
-        }
-
-        // ==========================================
-        // クリック/タップ解除（加速停止）
-        // ==========================================
-        function handleMouseUp(e) {
-            if (!isPlaying || !player || player.isDead || isChatActive) return;
-            if (e.button === 0) {
-                player.isDashing = false;
-            }
-        }
-
-        function handleKeyDown(e) {
-            if (!isPlaying || !player || player.isDead) return;
-
-            if (e.code === 'Enter') {
-                e.preventDefault();
-                if (isChatActive) {
-                    const txt = gameChatInput.value;
-                    if (txt.trim()) {
-                        const chatObj = { text: txt.trim(), time: Date.now() };
-                        pendingChatToSend = chatObj;
-                        
-                        handleChatReceived({
-                            senderUid: currentUser ? currentUser.uid : 'me',
-                            senderName: player.name,
-                            text: txt.trim(),
-                            time: chatObj.time,
-                            roomId: currentRoomId
-                        });
-
-                        syncSelfToFirebase();
-                        gameChatInput.value = '';
-                    } else {
-                        closeGameChat();
-                    }
-                } else {
-                    openGameChat();
-                }
-                return;
-            }
-
-            if (isChatActive) return;
-
-            switch (e.code) {
-                case 'KeyW':
-                case 'ArrowUp':
-                    keys.up = true;
-                    player.isDashing = true; 
-                    e.preventDefault();
-                    break;
-                case 'KeyS':
-                case 'ArrowDown':
-                    keys.down = true; 
-                    player.isDashing = false;
-                    e.preventDefault();
-                    break;
-                case 'KeyA':
-                case 'ArrowLeft':
-                    keys.left = true;
-                    e.preventDefault();
-                    break;
-                case 'KeyD':
-                case 'ArrowRight':
-                    keys.right = true;
-                    e.preventDefault();
-                    break;
-                case 'Space':
-                case 'ShiftLeft':
-                case 'ShiftRight':
-                    keys.dash = true;
-                    player.isDashing = true;
-                    e.preventDefault();
-                    break;
-            }
-        }
-
-        function handleKeyUp(e) {
-            if (!isPlaying || !player || player.isDead || isChatActive) return;
-
-            switch (e.code) {
-                case 'KeyW':
-                case 'ArrowUp':
-                    keys.up = false;
-                    if (!keys.dash) player.isDashing = false;
-                    break;
-                case 'KeyS':
-                case 'ArrowDown':
-                    keys.down = false;
-                    break;
-                case 'KeyA':
-                case 'ArrowLeft':
-                    keys.left = false;
-                    break;
-                case 'KeyD':
-                case 'ArrowRight':
-                    keys.right = false;
-                    break;
-                case 'Space':
-                case 'ShiftLeft':
-                case 'ShiftRight':
-                    keys.dash = false;
-                    if (!keys.up) player.isDashing = false;
-                    break;
-            }
-        }
-
-        function updatePlayerAngleFromKeysContinuous() {
-            if (!player || player.isDead || isChatActive) return;
-
-            const turnRate = 0.055; 
-
-            if (keys.left) {
-                player.targetAngle -= turnRate;
-            }
-            if (keys.right) {
-                player.targetAngle += turnRate;
-            }
-
-            while (player.targetAngle < -Math.PI) player.targetAngle += Math.PI * 2;
-            while (player.targetAngle > Math.PI) player.targetAngle -= Math.PI * 2;
-        }
-
-        // ==========================================
-        // タッチ操作（モバイル）対応
-        // ==========================================
-        function setupTouchEvents() {
-            const joystickZone = document.getElementById('joystickZone');
-            const joystickKnob = document.getElementById('joystickKnob');
-            const dashButton = document.getElementById('dashButton');
-
-            joystickZone.addEventListener('touchstart', (e) => {
-                if (!useMobileControls || isChatActive) return;
-                joystickActive = true;
-                const touch = e.touches[0];
-                const rect = joystickZone.getBoundingClientRect();
-                joystickStart.x = rect.left + rect.width / 2;
-                joystickStart.y = rect.top + rect.height / 2;
-
-                updateJoystick(touch);
-                e.preventDefault();
-            }, { passive: false });
-
-            window.addEventListener('touchmove', (e) => {
-                if (!useMobileControls || !joystickActive || isChatActive) return;
-                
-                for (let i = 0; i < e.touches.length; i++) {
-                    const touch = e.touches[i];
-                    if (touch.clientX < window.innerWidth * 0.6) {
-                        updateJoystick(touch);
-                        break;
-                    }
-                }
-            }, { passive: true });
-
-            window.addEventListener('touchend', (e) => {
-                if (!useMobileControls || !joystickActive) return;
-
-                let leftTouchStillExists = false;
-                for (let i = 0; i < e.touches.length; i++) {
-                    if (e.touches[i].clientX < window.innerWidth * 0.6) {
-                        leftTouchStillExists = true;
-                    }
-                }
-
-                if (!leftTouchStillExists) {
-                    joystickActive = false;
-                    joystickKnob.style.transform = `translate(0px, 0px)`;
-                }
-            });
-
-            function updateJoystick(touch) {
-                if (!player || player.isDead) return;
-
-                const dx = touch.clientX - joystickStart.x;
-                const dy = touch.clientY - joystickStart.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const maxRadius = 45;
-
-                let targetX = dx;
-                let targetY = dy;
-
-                if (dist > maxRadius) {
-                    const angle = Math.atan2(dy, dx);
-                    targetX = Math.cos(angle) * maxRadius;
-                    targetY = Math.sin(angle) * maxRadius;
-                }
-
-                joystickKnob.style.transform = `translate(${targetX}px, ${targetY}px)`;
-                player.targetAngle = Math.atan2(dy, dx);
-            }
-
-            dashButton.addEventListener('touchstart', (e) => {
-                if (!useMobileControls || isChatActive) return;
-                isMobileDashing = true;
-                if (player) player.isDashing = true;
-                e.preventDefault();
-            });
-
-            dashButton.addEventListener('touchend', (e) => {
-                if (!useMobileControls) return;
-                isMobileDashing = false;
-                if (player) player.isDashing = false;
-                e.preventDefault();
-            });
-        }
-
-        function showToast(text) {
-            const toast = document.getElementById('toast');
-            document.getElementById('toastText').innerText = text;
-            toast.style.opacity = '1';
-            
-            setTimeout(() => {
-                toast.style.opacity = '0';
-            }, 3500);
-        }
-
-        // ==========================================
-        // コリジョン判定
-        // ==========================================
-        function checkCollisions() {
-            if (!player || player.isDead) return;
-
-            const aliveSnakes = snakes.filter(s => !s.isDead);
-
-            // 1. エサの捕食判定
-            for (let i = foods.length - 1; i >= 0; i--) {
-                const f = foods[i];
-                
-                for (const snake of aliveSnakes) {
-                    if (snake.isGhost) continue;
-
-                    const head = snake.body[0];
-                    if (!head) continue;
-
-                    const dx = f.x - head.x;
-                    const dy = f.y - head.y;
-                    
-                    const maxDist = (snake.width / 2) + f.radius;
-                    if (Math.abs(dx) > maxDist || Math.abs(dy) > maxDist) {
-                        continue; 
-                    }
-
-                    const distSq = dx * dx + dy * dy;
-                    const collisionDistSq = maxDist * maxDist;
-
-                    if (distSq < collisionDistSq) {
-                        snake.score += f.value;
-                        foods.splice(i, 1);
-
-                        if (snake.id === 'player') {
-                            document.getElementById('scoreDisplay').innerText = Math.floor(player.score);
-                        }
-                        break; 
-                    }
-                }
-            }
-
-            // 2. 他のヘビへの自滅衝突判定
-            for (let i = 0; i < snakes.length; i++) {
-                const s1 = snakes[i];
-                if (s1.isDead || s1.isGhost || s1.isRemote) continue; 
-
-                const head1 = s1.body[0];
-                if (!head1) continue;
-
-                for (let j = 0; j < snakes.length; j++) {
-                    const s2 = snakes[j];
-                    if (s2.isDead || s2.isGhost || s1.id === s2.id) continue;
-
-                    const approxS2Length = s2.body.length * 4; 
-                    const headToHeadDistSq = (head1.x - s2.x) * (head1.x - s2.x) + (head1.y - s2.y) * (head1.y - s2.y);
-                    const safeRadius = approxS2Length + 100;
-                    if (headToHeadDistSq > safeRadius * safeRadius) {
-                        continue; 
-                    }
-
-                    const s1HalfWidth = s1.width / 2;
-                    const s2HalfWidth = s2.width / 2;
-                    const collisionDist = s1HalfWidth + s2HalfWidth * 0.95;
-                    const collisionDistSq = collisionDist * collisionDist;
-
-                    for (let k = 0; k < s2.body.length; k++) {
-                        const segment = s2.body[k];
-                        if (!segment) continue;
-                        const dx = head1.x - segment.x;
-                        const dy = head1.y - segment.y;
-
-                        if (Math.abs(dx) > collisionDist || Math.abs(dy) > collisionDist) {
-                            continue;
-                        }
-
-                        const distSq = dx * dx + dy * dy;
-
-                        if (distSq < collisionDistSq) {
-                            s1.die();
-
-                            if (s1.id === 'player') {
-                                onGameOver();
-                            } else {
-                                setTimeout(() => {
-                                    if (isPlaying) {
-                                        snakes = snakes.filter(s => !s.isDead);
-                                        spawnAIs(1);
-                                    }
-                                }, 2000);
-                            }
-
-                            if (s2.id === 'player') {
-                                totalKills++;
-                                showToast("敵のヘビを撃破しました！ (+1キル)");
-                            }
-                            break;
-                        }
-                    }
-                    if (s1.isDead) break;
-                }
-            }
-        }
 
         // ==========================================
         // UI & ミニマップ更新
@@ -2218,26 +1898,93 @@
                 document.getElementById('rankDisplay').innerText = `順位: ${myRank} / ${aliveSnakes.length}`;
             }
 
-            // ミニマップ
+            // 🌟 円形ネオンミニマップの超美麗な描画処理 🌟
             minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
-            const ratio = minimapCanvas.width / WORLD_SIZE;
+            const mWidth = minimapCanvas.width;
+            const mHeight = minimapCanvas.height;
+            const mCenterX = mWidth / 2;
+            const mCenterY = mHeight / 2;
+            const mRadius = mWidth / 2 - 6; // レーダー枠の内側の半径
+
+            // 1. レーダーグリッド背景の描画
+            minimapCtx.save();
+            minimapCtx.beginPath();
+            minimapCtx.arc(mCenterX, mCenterY, mRadius, 0, Math.PI * 2);
+            minimapCtx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+            minimapCtx.fill();
+            
+            // 同心円（レーダーの目盛り線）
+            minimapCtx.strokeStyle = 'rgba(6, 182, 212, 0.15)';
+            minimapCtx.lineWidth = 1;
+            for (let r = mRadius / 3; r <= mRadius; r += mRadius / 3) {
+                minimapCtx.beginPath();
+                minimapCtx.arc(mCenterX, mCenterY, r, 0, Math.PI * 2);
+                minimapCtx.stroke();
+            }
+
+            // 十字ライン
+            minimapCtx.beginPath();
+            minimapCtx.moveTo(mCenterX - mRadius, mCenterY);
+            minimapCtx.lineTo(mCenterX + mRadius, mCenterY);
+            minimapCtx.moveTo(mCenterX, mCenterY - mRadius);
+            minimapCtx.lineTo(mCenterX, mCenterY + mRadius);
+            minimapCtx.stroke();
+            minimapCtx.restore();
+
+            // 2. マップ全体の円形境界線をミニマップ上に描画
+            minimapCtx.save();
+            minimapCtx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+            minimapCtx.lineWidth = 1.5;
+            minimapCtx.shadowBlur = 4;
+            minimapCtx.shadowColor = 'rgba(239, 68, 68, 0.5)';
+            minimapCtx.beginPath();
+            minimapCtx.arc(mCenterX, mCenterY, mRadius - 2, 0, Math.PI * 2);
+            minimapCtx.stroke();
+            minimapCtx.restore();
+
+            // 3. プレイヤーや他のヘビたちの位置をマップ上にプロット
+            const ratio = (mRadius - 4) / (WORLD_SIZE / 2); // 中心地からの距離変換比率
 
             for (const s of aliveSnakes) {
                 if (s.id === 'player') continue;
-                minimapCtx.fillStyle = s.isRemote ? 'rgba(56, 189, 248, 0.8)' : 'rgba(239, 68, 68, 0.6)';
+
+                // 中心地からの相対座標を算出
+                const dx = s.x - WORLD_SIZE / 2;
+                const dy = s.y - WORLD_SIZE / 2;
+                
+                const dotX = mCenterX + dx * ratio;
+                const dotY = mCenterY + dy * ratio;
+
+                minimapCtx.fillStyle = s.isRemote ? 'rgba(56, 189, 248, 0.9)' : 'rgba(244, 63, 94, 0.7)';
                 minimapCtx.beginPath();
-                const sRadius = Math.min(5, Math.max(1.5, 1.5 + (s.score - 100) * 0.005));
-                minimapCtx.arc(s.x * ratio, s.y * ratio, sRadius, 0, Math.PI*2);
+                const sSize = s.isRemote ? 3 : 2;
+                minimapCtx.arc(dotX, dotY, sSize, 0, Math.PI * 2);
                 minimapCtx.fill();
             }
 
+            // 4. 自機プレイヤーの描画（ひときわ輝くシアンの点）
             if (player && !player.isDead) {
-                minimapCtx.fillStyle = player.isGhost ? 'rgba(34, 211, 238, 0.4)' : '#22d3ee';
+                const dx = player.x - WORLD_SIZE / 2;
+                const dy = player.y - WORLD_SIZE / 2;
+                const dotX = mCenterX + dx * ratio;
+                const dotY = mCenterY + dy * ratio;
+
+                minimapCtx.save();
+                minimapCtx.shadowBlur = 6;
+                minimapCtx.shadowColor = '#22d3ee';
+                minimapCtx.fillStyle = player.isGhost ? 'rgba(34, 211, 238, 0.5)' : '#22d3ee';
                 minimapCtx.beginPath();
-                const pRadius = Math.min(8, Math.max(3.5, 3.5 + (player.score - 100) * 0.005));
-                minimapCtx.arc(player.x * ratio, player.y * ratio, pRadius, 0, Math.PI*2);
+                minimapCtx.arc(dotX, dotY, 4, 0, Math.PI * 2);
                 minimapCtx.fill();
+                ctx.restore();
             }
+
+            // 5. 外枠ベゼルの描画
+            minimapCtx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
+            minimapCtx.lineWidth = 2.5;
+            minimapCtx.beginPath();
+            minimapCtx.arc(mCenterX, mCenterY, mRadius + 1, 0, Math.PI * 2);
+            minimapCtx.stroke();
         }
 
         // ==========================================
@@ -2283,6 +2030,9 @@
 
             drawGrid(ctx, cameraX, cameraY, zoom);
 
+            // 🌟 円形ワールドのアリーナ背景（外側を暗くする）の描画 🌟
+            drawArenaBackground(ctx, cameraX, cameraY, zoom);
+
             foods.forEach(f => f.draw(ctx, cameraX, cameraY, zoom));
 
             const sortedSnakesForDraw = [...snakes].sort((a, b) => {
@@ -2299,23 +2049,63 @@
             requestAnimationFrame(gameLoop);
         }
 
+        // 🌟 円形アリーナの背景マスク（マップの外側を真っ暗にする） 🌟
+        function drawArenaBackground(ctx, cameraX, cameraY, zoom) {
+            ctx.save();
+            const centerX = (WORLD_SIZE / 2 - cameraX) * zoom + window.innerWidth / 2;
+            const centerY = (WORLD_SIZE / 2 - cameraY) * zoom + window.innerHeight / 2;
+            const radius = (WORLD_SIZE / 2) * zoom;
+
+            // 円の外側を切り抜く（クリッピングか反転塗り潰し）
+            // 画面全体を覆う四角形からワールド円形をくり抜いて暗くする
+            ctx.fillStyle = '#05070f';
+            
+            // 境界の外に巨大なドーナツ状の影を描く
+            const grad = ctx.createRadialGradient(centerX, centerY, radius * 0.85, centerX, centerY, radius);
+            grad.addColorStop(0, 'rgba(5, 7, 15, 0)');
+            grad.addColorStop(0.95, 'rgba(5, 7, 15, 0.85)');
+            grad.addColorStop(1, 'rgba(5, 7, 15, 1)');
+
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // 🌟 円形アリーナの境界ネオンサークル描画 🌟
         function drawWorldBounds(ctx, cameraX, cameraY, zoom) {
             ctx.save();
-            ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-            ctx.lineWidth = 10 * zoom;
             
-            const x0 = (0 - cameraX) * zoom + window.innerWidth / 2;
-            const y0 = (0 - cameraY) * zoom + window.innerHeight / 2;
-            const x1 = (WORLD_SIZE - cameraX) * zoom + window.innerWidth / 2;
-            const y1 = (WORLD_SIZE - cameraY) * zoom + window.innerHeight / 2;
+            const centerX = (WORLD_SIZE / 2 - cameraX) * zoom + window.innerWidth / 2;
+            const centerY = (WORLD_SIZE / 2 - cameraY) * zoom + window.innerHeight / 2;
+            const radius = (WORLD_SIZE / 2) * zoom;
 
-            ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+            // マップ外を完全に暗黒に塗る
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+            ctx.lineWidth = 14 * zoom;
+            ctx.shadowBlur = 24 * zoom;
+            ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius - (7 * zoom), 0, Math.PI * 2);
+            ctx.stroke();
+
+            // ドーナツの穴のようにワールド外側を完全に隠す
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#020306';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.rect(window.innerWidth, 0, -window.innerWidth, window.innerHeight); // 画面全体
+            ctx.fill();
+
             ctx.restore();
         }
 
         function drawGrid(ctx, cameraX, cameraY, zoom) {
             ctx.save();
-            ctx.strokeStyle = '#1a2236'; 
+            ctx.strokeStyle = '#12192c'; 
             ctx.lineWidth = 0.5 * zoom;
 
             const step = GRID_SIZE * zoom;
