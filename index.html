@@ -355,6 +355,7 @@
 
         let currentUser = null;
         let isFirebaseConnected = false;
+        let lobbySyncInterval = null; // ロビーハートビートタイマー
 
         // 起動時に匿名認証を実行
         async function initAuth() {
@@ -386,9 +387,13 @@
                 
                 // 確実に許可されている「players」コレクションを安全に1つのチャンネルとして監視
                 setupMultiplayerSubscription();
+                
+                // ロビー同期タイマー開始 (3秒に1回、スタート前のホスト状態をFirebaseへ定期アピール)
+                startLobbyHeartbeat();
             } else {
                 currentUser = null;
                 isFirebaseConnected = false;
+                stopLobbyHeartbeat();
             }
         });
 
@@ -953,22 +958,39 @@
             });
         }
 
-        // ロビーにいる時のダミー送信 (ゲーム開始前、チャット送信時のみ更新)
+        // スタート画面(ロビー)での自分の状態・部屋パス情報の同期用アピール処理
         async function syncLobbyStatus(chatText = null) {
             if (!currentUser || gameMode !== 'online' || !isConfigured) return;
             
             const nickname = document.getElementById('nicknameInput').value.trim() || 'SlitherSnake';
             const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
             
+            // 現在のスタート画面の設定情報を読み取る
+            const roomPass = document.getElementById('roomPasswordInput').value.trim() || 'global';
+            const isHostChecked = document.getElementById('roleHost').checked;
+
             const now = Date.now();
             const payload = {
                 uid: currentUser.uid,
-                roomId: 'global', // ロビーにいる事を示す
+                roomId: roomPass, // 入力している部屋パスワードまたはglobal
                 name: nickname,
-                isDead: true, // ロビーでは死に扱い（ゲーム盤面に出さない）
+                isDead: true, // スタート画面(ロビー)にいる事を示す
                 lastUpdated: now,
                 skinIndex: selectedSkinIndex
             };
+
+            // ホストチェックがあり、プライベートモードが選ばれている場合
+            if (isHostChecked && onlineSubMode === 'private' && roomPass && roomPass !== 'global') {
+                const wSize = parseInt(document.getElementById('cfgWorldSize').value) || 4000;
+                const aiCnt = parseInt(document.getElementById('cfgAiCount').value) || 25;
+                const foodCnt = parseInt(document.getElementById('cfgFoodCount').value) || 800;
+
+                payload.hostConfig = {
+                    worldSize: wSize,
+                    aiCount: aiCnt,
+                    foodCount: foodCnt
+                };
+            }
 
             if (chatText) {
                 const chatObj = {
@@ -977,12 +999,40 @@
                 };
                 payload.lastChat = chatObj;
                 pendingChatToSend = chatObj;
+            } else if (pendingChatToSend && (now - pendingChatToSend.time < 8000)) {
+                // 直近の自分のチャットを保持
+                payload.lastChat = pendingChatToSend;
             }
 
             try {
                 await setDoc(playerDocRef, payload);
             } catch (e) {
                 console.error("Error sending lobby update:", e);
+            }
+        }
+
+        // ロビー待機中に定期的にアピールして「部屋リスト」にリアルタイム表示させるタイマー
+        function startLobbyHeartbeat() {
+            stopLobbyHeartbeat();
+            // 3秒に1回、ロビーの自分の状態（ホスト設定を含む）を自動でアップロードする
+            lobbySyncInterval = setInterval(() => {
+                if (isFirebaseConnected && !isPlaying) {
+                    syncLobbyStatus();
+                }
+            }, 3000);
+            
+            // 初回を即時実行
+            setTimeout(() => {
+                if (isFirebaseConnected && !isPlaying) {
+                    syncLobbyStatus();
+                }
+            }, 500);
+        }
+
+        function stopLobbyHeartbeat() {
+            if (lobbySyncInterval) {
+                clearInterval(lobbySyncInterval);
+                lobbySyncInterval = null;
             }
         }
 
@@ -995,13 +1045,16 @@
             if (unsubscribePlayers) unsubscribePlayers();
 
             unsubscribePlayers = onSnapshot(playersCol, (snapshot) => {
+                const rawRooms = [];
+                const now = Date.now();
+
                 snapshot.docChanges().forEach((change) => {
                     const id = change.doc.id;
                     const data = change.doc.data();
 
                     if (id === currentUser.uid) return; 
 
-                    if (change.type === 'removed' || (data && data.isDead)) {
+                    if (change.type === 'removed' || (data && data.isDead && isPlaying)) {
                         removeRemoteSnake(id);
                     } else if (data) {
                         if (Date.now() - data.lastUpdated > 5000) {
@@ -1009,15 +1062,14 @@
                             return;
                         }
 
-                        // 同一の部屋(currentRoomId)のプレイヤーのみ物理判定・同期
-                        if (data.roomId === currentRoomId) {
+                        // 同一の部屋(currentRoomId)のプレイ中のプレイヤーのみ物理判定・同期
+                        if (isPlaying && data.roomId === currentRoomId && !data.isDead) {
                             updateRemoteSnake(id, data);
                         } else {
                             removeRemoteSnake(id);
                         }
 
                         // 【安全なチャット受信同期処理】
-                        // すべての接続済みヘビから送信される .lastChat をリアルタイム監視し、メモリ上で最新ログを抽出
                         if (data.lastChat && data.lastChat.time && data.lastChat.text) {
                             const chatKey = `${id}_${data.lastChat.time}`;
                             if (!processedChats[chatKey]) {
@@ -1037,11 +1089,10 @@
                     }
                 });
 
-                // サーバー検索（部屋リスト）の構築
-                const rawRooms = [];
-                const now = Date.now();
+                // 🌟 インデックス設定が不要な全プレイヤー走査による安全な部屋リスト再構築 🌟
                 snapshot.forEach(docSnap => {
                     const d = docSnap.data();
+                    // 他のプレイヤーがホスト用の設定（hostConfig）を持っており、6秒以内に更新されている場合に部屋リストに表示する
                     if (d && d.hostConfig && d.roomId !== 'global' && d.roomId !== 'public' && (now - d.lastUpdated < 6000)) {
                         rawRooms.push({
                             id: d.roomId,
@@ -1080,8 +1131,9 @@
             }
         }
 
+        // 退室・削除用の安全なフィルター修正 (バグを完全解消)
         function removeRemoteSnake(id) {
-            snakes = snakes.filter(s => !s.isDead);
+            snakes = snakes.filter(s => s.id !== id);
         }
 
         function interpolateRemoteSnakes() {
@@ -1146,6 +1198,9 @@
                     document.getElementById('roleGuest').checked = true;
                     document.getElementById('hostCustomSettings').classList.add('hidden');
                     isRoomHost = false;
+                    
+                    // 部屋切り替え時に設定アピールを更新
+                    syncLobbyStatus();
                     showToast(`部屋「${room.id}」を選択しました！`);
                 };
                 listContainer.appendChild(item);
@@ -1351,6 +1406,8 @@
             if (player && !player.isDead) {
                 player.skin = SKINS[index] || SKINS[0];
             }
+            // スキン変更をロビー同期へ通知
+            syncLobbyStatus();
         }
 
         function init() {
@@ -1400,6 +1457,7 @@
                 tabOnline.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
                 panelNormal.classList.remove('hidden');
                 panelOnline.classList.add('hidden');
+                stopLobbyHeartbeat();
             };
 
             tabOnline.onclick = () => {
@@ -1408,6 +1466,7 @@
                 tabNormal.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
                 panelOnline.classList.remove('hidden');
                 panelNormal.classList.add('hidden');
+                startLobbyHeartbeat();
             };
 
             // オンラインサブタブ: パブリック vs プライベート
@@ -1421,6 +1480,7 @@
                 subTabPublic.className = "py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow flex-1";
                 subTabPrivate.className = "py-1 text-slate-400 hover:text-white font-bold rounded flex-1";
                 privateSettingsArea.classList.add('hidden');
+                syncLobbyStatus();
             };
 
             subTabPrivate.onclick = () => {
@@ -1428,6 +1488,7 @@
                 subTabPrivate.className = "py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow flex-1";
                 subTabPublic.className = "py-1 text-slate-400 hover:text-white font-bold rounded flex-1";
                 privateSettingsArea.classList.remove('hidden');
+                syncLobbyStatus();
             };
 
             // ホスト設定のトグル
@@ -1438,23 +1499,40 @@
             roleGuest.onchange = () => {
                 isRoomHost = false;
                 hostCustomSettings.classList.add('hidden');
+                syncLobbyStatus();
             };
             roleHost.onchange = () => {
                 isRoomHost = true;
                 hostCustomSettings.classList.remove('hidden');
+                syncLobbyStatus();
             };
 
             const cfgWorldSize = document.getElementById('cfgWorldSize');
             const valWorldSize = document.getElementById('valWorldSize');
-            cfgWorldSize.oninput = () => { valWorldSize.innerText = `${cfgWorldSize.value}x${cfgWorldSize.value}`; };
+            cfgWorldSize.oninput = () => { 
+                valWorldSize.innerText = `${cfgWorldSize.value}x${cfgWorldSize.value}`; 
+                syncLobbyStatus();
+            };
 
             const cfgAiCount = document.getElementById('cfgAiCount');
             const valAiCount = document.getElementById('valAiCount');
-            cfgAiCount.oninput = () => { valAiCount.innerText = `${cfgAiCount.value}匹`; };
+            cfgAiCount.oninput = () => { 
+                valAiCount.innerText = `${cfgAiCount.value}匹`; 
+                syncLobbyStatus();
+            };
 
             const cfgFoodCount = document.getElementById('cfgFoodCount');
             const valFoodCount = document.getElementById('valFoodCount');
-            cfgFoodCount.oninput = () => { valFoodCount.innerText = `${cfgFoodCount.value}個`; };
+            cfgFoodCount.oninput = () => { 
+                valFoodCount.innerText = `${cfgFoodCount.value}個`; 
+                syncLobbyStatus();
+            };
+
+            // パスワード入力時も即反映
+            const roomPasswordInput = document.getElementById('roomPasswordInput');
+            roomPasswordInput.oninput = () => {
+                syncLobbyStatus();
+            };
 
             window.addEventListener('mousemove', handleMouseMove);
             window.addEventListener('mousedown', handleMouseDown);
@@ -1499,6 +1577,9 @@
             document.getElementById('hud').classList.add('hidden');
             updateMobileControlsVisibility(); 
             document.getElementById('gameOverScreen').classList.remove('hidden');
+            
+            // ロビータイマーを復活させてロビーでのホストアピールを再開
+            startLobbyHeartbeat();
         }
 
         async function startGame() {
@@ -1510,6 +1591,9 @@
                 showToast("⚠️ オンラインで遊ぶにはFirebase設定が必要です！プログラム内の'myCustomConfig'に貼り付けてね！");
                 return;
             }
+
+            // ゲーム中はスタート画面用のハートビートタイマーを一旦停止
+            stopLobbyHeartbeat();
 
             snakes = [];
             foods = [];
@@ -1595,6 +1679,9 @@
         function restartGame() {
             document.getElementById('gameOverScreen').classList.add('hidden');
             document.getElementById('startScreen').classList.remove('hidden');
+            
+            // ロビー同期を再起動
+            startLobbyHeartbeat();
         }
 
         // ==========================================
@@ -1677,6 +1764,9 @@
             player.targetAngle = Math.atan2(dy, dx);
         }
 
+        // ==========================================
+        // クリック/タップ（加速開始）
+        // ==========================================
         function handleMouseDown(e) {
             if (!isPlaying || !player || player.isDead || isChatActive) return;
             if (e.button === 0) {
@@ -1684,6 +1774,9 @@
             }
         }
 
+        // ==========================================
+        // クリック/タップ解除（加速停止）
+        // ==========================================
         function handleMouseUp(e) {
             if (!isPlaying || !player || player.isDead || isChatActive) return;
             if (e.button === 0) {
