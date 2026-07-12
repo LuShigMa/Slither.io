@@ -311,7 +311,7 @@
         import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ==========================================
-        // 🔥 あなたのFIREBASE設定（完了しています！）🔥
+        // 🔥 あなたのFIREBASE設定 🔥
         // ==========================================
         const myCustomConfig = {
             apiKey: "AIzaSyDbWHfIJHKFucM6hgZY3PGwecPIOu5YShQ",
@@ -323,13 +323,12 @@
         };
 
         // ==========================================
-        // Firebase初期化と認証設定 (ルール3準拠)
+        // Firebase初期化と認証設定
         // ==========================================
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'slither-multi-default';
         let firebaseConfig = null;
         let isConfigured = false;
 
-        // 環境に合わせた自動判定
         if (myCustomConfig && myCustomConfig.apiKey) {
             firebaseConfig = myCustomConfig;
             isConfigured = true;
@@ -337,7 +336,6 @@
             firebaseConfig = JSON.parse(__firebase_config);
             isConfigured = true;
         } else {
-            // ローカル（オフライン）でエラーなく動かすためのダミー枠
             firebaseConfig = {
                 apiKey: "dummy-key-offline",
                 authDomain: "dummy.firebaseapp.com",
@@ -346,7 +344,7 @@
                 messagingSenderId: "12345",
                 appId: "1:1234:web:1234"
             };
-            isConfigured = false; // 未設定マーク
+            isConfigured = false;
         }
 
         const app = initializeApp(firebaseConfig);
@@ -355,7 +353,7 @@
 
         let currentUser = null;
         let isFirebaseConnected = false;
-        let lobbySyncInterval = null; // ロビーハートビートタイマー
+        let lobbySyncInterval = null; 
 
         // 起動時に匿名認証を実行
         async function initAuth() {
@@ -385,10 +383,7 @@
                 document.getElementById('statusText').innerText = "オンラインサーバー接続完了！";
                 document.getElementById('statusIndicator').className = "w-2 h-2 rounded-full bg-emerald-500";
                 
-                // 確実に許可されている「players」コレクションを安全に1つのチャンネルとして監視
                 setupMultiplayerSubscription();
-                
-                // ロビー同期タイマー開始 (3秒に1回、スタート前のホスト状態をFirebaseへ定期アピール)
                 startLobbyHeartbeat();
             } else {
                 currentUser = null;
@@ -397,41 +392,27 @@
             }
         });
 
-        initAuth();
-
-        // 突然ウィンドウを閉じたりリロードしたときの退室処理 (幽霊ヘビが残るバグを解消)
-        window.addEventListener('beforeunload', () => {
-            if (currentUser && isConfigured && db) {
-                const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
-                // 同期的に確実にデータを消すために、空にするか削除する
-                setDoc(playerDocRef, { isDead: true, lastUpdated: 0 }).catch(e => console.error(e));
-            }
-        });
-
         // ==========================================
         // 定数 & 動的ゲーム設定値
         // ==========================================
-        let WORLD_SIZE = 4000;         // 世界の幅・高さ
-        let BASE_SPEED = 2.0;          // 基本移動速度
-        let DASH_SPEED = 4.2;          // ダッシュ時移動速度
-        const GRID_SIZE = 100;         // グリッドの間隔
-        let AI_COUNT = 25;             // AI出現数
-        let FOOD_COUNT = 800;          // エサの配置数
-        let SPECIAL_FOOD_COUNT = 50;   // 特殊エサ配置数
+        let WORLD_SIZE = 4000;         
+        let BASE_SPEED = 2.0;          
+        let DASH_SPEED = 4.2;          
+        const GRID_SIZE = 100;         
+        let AI_COUNT = 25;             
+        let FOOD_COUNT = 800;          
+        let SPECIAL_FOOD_COUNT = 50;   
 
-        // モード管理
-        let gameMode = 'normal';       // 'normal' または 'online'
-        let onlineSubMode = 'public';  // 'public' または 'private'
-        let currentRoomId = 'global';  // 所属ルームID（ロビー時はglobal, 開始すると部屋IDに変更）
-        let isRoomHost = false;        // プライベート部屋のホストフラグ
-        let isChatActive = false;      // チャットウィンドウが開いているか
+        let gameMode = 'normal';       
+        let onlineSubMode = 'public';  
+        let currentRoomId = 'global';  
+        let isRoomHost = false;        
+        let isChatActive = false;      
 
-        // チャット履歴管理マップ（重複出力を防止）
-        const processedChats = {};     // { senderUid: time }
-        const lobbyChatHistory = [];   // ロビーチャットキャッシュ
-        const gameChatHistory = [];    // インゲームチャットキャッシュ
+        const processedChats = {};     
+        const lobbyChatHistory = [];   
+        const gameChatHistory = [];    
 
-        // スキンのカラーパレット
         const SKINS = [
             { name: 'シアン', primary: '#06b6d4', secondary: '#0891b2', glow: 'rgba(6, 182, 212, 0.4)' },
             { name: 'エメラルド', primary: '#10b981', secondary: '#059669', glow: 'rgba(16, 185, 129, 0.4)' },
@@ -445,9 +426,6 @@
             'Ouroboros', 'SlitherBot', 'ViperAI', 'SwiftSnake', 'ShadowCoil'
         ];
 
-        // ==========================================
-        // ゲームステート
-        // ==========================================
         let canvas, ctx;
         let minimapCanvas, minimapCtx;
         
@@ -517,7 +495,6 @@
             update() {
                 if (this.isDead || this.isRemote) return;
 
-                // チャット起動中は自機ヘビの移動・ブーストを停止 (一時停止ゴースト状態)
                 if (this.id === 'player' && isChatActive) {
                     this.isGhost = true;
                     this.speed = 0;
@@ -554,22 +531,18 @@
                 this.x += Math.cos(this.angle) * this.speed;
                 this.y += Math.sin(this.angle) * this.speed;
 
-                // 🌟 本家同様の「円形マップ」境界線物理判定 🌟
                 const centerX = WORLD_SIZE / 2;
                 const centerY = WORLD_SIZE / 2;
-                const maxRadius = (WORLD_SIZE / 2) - 40; // マップ外枠から40px手前
+                const maxRadius = (WORLD_SIZE / 2) - 40;
 
                 const dxFromCenter = this.x - centerX;
                 const dyFromCenter = this.y - centerY;
                 const distFromCenter = Math.sqrt(dxFromCenter * dxFromCenter + dyFromCenter * dyFromCenter);
 
                 if (distFromCenter > maxRadius) {
-                    // 円形境界にぶつかった場合、内側に滑らかに押し戻す＆軌道を内側に向ける
                     const angleToCenter = Math.atan2(-dyFromCenter, -dxFromCenter);
                     this.x = centerX + Math.cos(angleToCenter) * -maxRadius;
                     this.y = centerY + Math.sin(angleToCenter) * -maxRadius;
-                    
-                    // 進行方向も強制的に内側に向かせる
                     this.targetAngle = angleToCenter + (Math.random() - 0.5) * 0.5;
                 }
 
@@ -861,7 +834,6 @@
                         this.angle += (Math.random() - 0.5) * 1.5;
                     }
 
-                    // 🌟 円形マップ境界の内側にエサを制限 🌟
                     const centerX = WORLD_SIZE / 2;
                     const centerY = WORLD_SIZE / 2;
                     const maxRadius = (WORLD_SIZE / 2) - 30;
@@ -874,7 +846,7 @@
                         const angle = Math.atan2(dyFromCenter, dxFromCenter);
                         this.x = centerX + Math.cos(angle) * (maxRadius - 10);
                         this.y = centerY + Math.sin(angle) * (maxRadius - 10);
-                        this.angle = angle + Math.PI; // 逆方向に反転
+                        this.angle = angle + Math.PI; 
                     }
                 }
             }
@@ -915,69 +887,10 @@
         // ==========================================
         // オンラインマルチプレイヤー同期ロジック (Firestore)
         // ==========================================
-        let lastSyncTime = 0;
-        const SYNC_INTERVAL = 250; 
-
-        // 最後に送信したチャットメッセージ
-        let pendingChatToSend = null; 
-
-        // 自分のステータスを報告 (playersコレクションに集約)
-        function syncSelfToFirebase() {
-            if (!currentUser || !isPlaying || !player || player.isDead || gameMode !== 'online' || !isConfigured) return;
-
-            const now = Date.now();
-            if (now - lastSyncTime < SYNC_INTERVAL) return;
-            lastSyncTime = now;
-
-            // 制限を解除し、ヘビのすべての体のパーツ座標（体全体の情報）をサーバーに送信
-            const simplifiedBody = player.body.map(part => ({
-                x: Math.round(part.x),
-                y: Math.round(part.y)
-            }));
-
-            const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
-            
-            // 送信ペイロードの組み立て（すべての情報をサーバーに送れるように構成）
-            const payload = {
-                uid: currentUser.uid,
-                roomId: currentRoomId, 
-                name: player.name,
-                x: Math.round(player.x),
-                y: Math.round(player.y),
-                angle: Number(player.angle.toFixed(3)),
-                score: player.score,
-                skinIndex: selectedSkinIndex,
-                isDashing: player.isDashing,
-                isGhost: player.isGhost, 
-                body: simplifiedBody,
-                isDead: false,
-                lastUpdated: now
-            };
-
-            // ホストの場合、部屋の詳細設定も乗せる (部屋リスト & 設定共有)
-            if (isRoomHost && onlineSubMode === 'private') {
-                payload.hostConfig = {
-                    worldSize: WORLD_SIZE,
-                    aiCount: AI_COUNT,
-                    foodCount: FOOD_COUNT
-                };
-            }
-
-            // 最新のチャットメッセージがあれば、それも完璧に乗せる
-            if (pendingChatToSend) {
-                payload.lastChat = pendingChatToSend;
-            }
-
-            setDoc(playerDocRef, payload).catch(err => {
-                console.error("Firebase sync failed:", err);
-            });
-        }
-
-        // 🌟 部屋でのプレイが始まった「その瞬間」に即時強制的に部屋の情報をサーバーに送信する関数 🌟
         async function forceSyncRoomAndPlayerToFirebase() {
             if (!currentUser || !isConfigured || gameMode !== 'online') return;
             const now = Date.now();
-            lastSyncTime = now; // 同期用の時間制限をリセット
+            lastSyncTime = now; 
 
             const simplifiedBody = player ? player.body.map(part => ({
                 x: Math.round(part.x),
@@ -1002,7 +915,6 @@
                 lastUpdated: now
             };
 
-            // プレイ開始時、ホスト情報を最速で送信しリストから絶対に消えたり不整合が起きたりするのを防ぐ
             if (isRoomHost && onlineSubMode === 'private') {
                 payload.hostConfig = {
                     worldSize: WORLD_SIZE,
@@ -1023,28 +935,25 @@
             }
         }
 
-        // スタート画面(ロビー)での自分の状態・部屋パス情報の同期用アピール処理
         async function syncLobbyStatus(chatText = null) {
             if (!currentUser || gameMode !== 'online' || !isConfigured) return;
             
             const nickname = document.getElementById('nicknameInput').value.trim() || 'SlitherSnake';
             const playerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
             
-            // 現在のスタート画面の設定情報を読み取る
             const roomPass = document.getElementById('roomPasswordInput').value.trim() || 'global';
             const isHostChecked = document.getElementById('roleHost').checked;
 
             const now = Date.now();
             const payload = {
                 uid: currentUser.uid,
-                roomId: roomPass, // 入力している部屋パスワードまたはglobal
+                roomId: roomPass, 
                 name: nickname,
-                isDead: true, // スタート画面(ロビー)にいる事を示す
+                isDead: true, 
                 lastUpdated: now,
                 skinIndex: selectedSkinIndex
             };
 
-            // ホストチェックがあり、プライベートモードが選ばれている場合
             if (isHostChecked && onlineSubMode === 'private' && roomPass && roomPass !== 'global') {
                 const wSize = parseInt(document.getElementById('cfgWorldSize').value) || 4000;
                 const aiCnt = parseInt(document.getElementById('cfgAiCount').value) || 25;
@@ -1065,7 +974,6 @@
                 payload.lastChat = chatObj;
                 pendingChatToSend = chatObj;
             } else if (pendingChatToSend && (now - pendingChatToSend.time < 8000)) {
-                // 直近の自分のチャットを保持
                 payload.lastChat = pendingChatToSend;
             }
 
@@ -1076,17 +984,14 @@
             }
         }
 
-        // ロビー待機中に定期的にアピールして「部屋リスト」にリアルタイム表示させるタイマー
         function startLobbyHeartbeat() {
             stopLobbyHeartbeat();
-            // 3秒に1回、ロビーの自分の状態（ホスト設定を含む）を自動でアップロードする
             lobbySyncInterval = setInterval(() => {
                 if (isFirebaseConnected && !isPlaying) {
                     syncLobbyStatus();
                 }
             }, 3000);
             
-            // 初回を即時実行
             setTimeout(() => {
                 if (isFirebaseConnected && !isPlaying) {
                     syncLobbyStatus();
@@ -1112,11 +1017,9 @@
             unsubscribePlayers = onSnapshot(playersCol, (snapshot) => {
                 const rawRooms = [];
                 const now = Date.now();
-                let matchingRoomParticipants = 0; // 選択中のプライベート部屋にいる他の人数
+                let matchingRoomParticipants = 0; 
 
                 const activeRoomPass = document.getElementById('roomPasswordInput').value.trim();
-
-                // 🌟 ゴースト/ちらつきを防止し、ランキング・ミニマップ・プレイヤー座標を完全同期するスナップショット走査 🌟
                 const activeRemoteUids = new Set();
 
                 snapshot.forEach((docSnap) => {
@@ -1125,7 +1028,6 @@
 
                     if (id === currentUser.uid) return;
 
-                    // 1. サーバー検索用の部屋リスト抽出（他プレイヤーがhostConfigを持っており、かつ同期が生きている場合）
                     if (data && data.hostConfig && data.roomId !== 'global' && data.roomId !== 'public' && (now - data.lastUpdated < 6000)) {
                         rawRooms.push({
                             id: data.roomId,
@@ -1135,7 +1037,6 @@
                         });
                     }
 
-                    // 2. 同じ部屋でプレイ中であるプレイヤーの座標・体の同期
                     if (data && data.roomId === currentRoomId && !data.isDead && (now - data.lastUpdated < 5000)) {
                         activeRemoteUids.add(id);
                         if (isPlaying) {
@@ -1143,13 +1044,11 @@
                         }
                     }
 
-                    // 3. 部屋に入ったら自動でホスト側・ゲスト側がゲームをスタートする合流処理
                     if (!isPlaying && gameMode === 'online' && onlineSubMode === 'private' && activeRoomPass) {
                         if (data && data.roomId === activeRoomPass && (now - data.lastUpdated < 5000)) {
                             matchingRoomParticipants++;
 
                             if (isRoomHost && matchingRoomParticipants >= 1) {
-                                // ゲストの合流を発見
                                 showToast(`🎮 友達（${data.name || 'ゲスト'}）が部屋に合流しました！自動スタートします！`);
                                 setTimeout(() => {
                                     if (!isPlaying) {
@@ -1157,7 +1056,6 @@
                                     }
                                 }, 1500);
                             } else if (!isRoomHost && data.hostConfig && data.roomId === activeRoomPass) {
-                                // ゲストがホストの設定を受信して自動合流
                                 WORLD_SIZE = data.hostConfig.worldSize || 4000;
                                 AI_COUNT = data.hostConfig.aiCount || 25;
                                 FOOD_COUNT = data.hostConfig.foodCount || 800;
@@ -1171,11 +1069,10 @@
                         }
                     }
 
-                    // 4. チャットデータのリアルタイム同期
                     if (data && data.lastChat && data.lastChat.time && data.lastChat.text) {
                         const chatKey = `${id}_${data.lastChat.time}`;
                         if (!processedChats[chatKey]) {
-                            processedChats[chatKey] = true; // 既読マーク
+                            processedChats[chatKey] = true; 
                             
                             handleChatReceived({
                                 senderUid: id,
@@ -1188,11 +1085,10 @@
                     }
                 });
 
-                // 🌟 現在プレイしていない、あるいは退室したプレイヤーのヘビを完全に削除してミニマップとランキングをクリア 🌟
                 if (isPlaying) {
                     snakes = snakes.filter(s => {
-                        if (!s.isRemote) return true; // 自機やローカルAIは維持
-                        return activeRemoteUids.has(s.id); // データベース上でアクティブなヘビのみ残す
+                        if (!s.isRemote) return true; 
+                        return activeRemoteUids.has(s.id); 
                     });
                 }
 
@@ -1225,7 +1121,6 @@
             }
         }
 
-        // 退室・削除用の安全なフィルター
         function removeRemoteSnake(id) {
             snakes = snakes.filter(s => s.id !== id);
         }
@@ -1249,14 +1144,10 @@
             });
         }
 
-        // ==========================================
-        // サーバー検索用の部屋リスト描画
-        // ==========================================
         function renderLobbyRooms(rooms) {
             const listContainer = document.getElementById('lobbyRoomList');
             listContainer.innerHTML = '';
             
-            // 重複を除去
             const uniqueRooms = [];
             const seen = new Set();
             for (const r of rooms) {
@@ -1293,12 +1184,10 @@
                     document.getElementById('hostCustomSettings').classList.add('hidden');
                     isRoomHost = false;
                     
-                    // 部屋設定（世界の広さ等）をリストからクリック時に受信して一時適用
                     WORLD_SIZE = room.worldSize || 4000;
                     AI_COUNT = room.aiCount || 25;
                     FOOD_COUNT = room.foodCount || 800;
 
-                    // 部屋切り替え時に設定アピールを更新
                     syncLobbyStatus();
                     showToast(`部屋「${room.id}」を選択しました！ホストの開始を待ちます...`);
                 };
@@ -1306,7 +1195,6 @@
             });
         }
 
-        // 強制パブリック自動合流アルゴリズム
         async function resolvePublicRoom() {
             if (!isConfigured) return;
             try {
@@ -1353,9 +1241,6 @@
             }
         }
 
-        // ==========================================
-        // リアルタイムチャット受信ハンドラー
-        // ==========================================
         function handleChatReceived(msg) {
             const isLobbyChat = msg.roomId === 'global';
             const history = isLobbyChat ? lobbyChatHistory : gameChatHistory;
@@ -1392,23 +1277,18 @@
             });
         }
 
-        // 安全にHTMLタグをエスケープ
         function escapeHTML(str) {
             return str.replace(/[&<>'"]/g, 
                 tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
             );
         }
 
-        // ==========================================
-        // UI & チャット入力処理
-        // ==========================================
         const lobbyChatForm = document.getElementById('lobbyChatForm');
         const lobbyChatInput = document.getElementById('lobbyChatInput');
         const gameChatOverlay = document.getElementById('gameChatOverlay');
         const gameChatForm = document.getElementById('gameChatForm');
         const gameChatInput = document.getElementById('gameChatInput');
 
-        // ロビーチャット送信
         lobbyChatForm.onsubmit = (e) => {
             e.preventDefault();
             const text = lobbyChatInput.value.trim();
@@ -1430,7 +1310,6 @@
             }
         };
 
-        // ゲーム内チャット送信
         gameChatForm.onsubmit = (e) => {
             e.preventDefault();
             const text = gameChatInput.value.trim();
@@ -1481,319 +1360,351 @@
         document.getElementById('btnOpenGameChat').onclick = openGameChat;
         document.getElementById('btnCloseGameChat').onclick = closeGameChat;
 
-        // ==========================================
-        // UIインタラクション ＆ 初期化
-        // ==========================================
-        window.onload = () => {
-            init();
-        };
+        let lastMouseX = 0;
+        let lastMouseY = 0;
 
-        // スキン変更関数
-        function selectSkin(index, element) {
-            selectedSkinIndex = index;
-            const buttons = document.getElementById('skinSelector').children;
-            for (let btn of buttons) {
-                btn.classList.remove('border-white', 'scale-110', 'shadow-lg');
-                btn.classList.add('border-transparent', 'opacity-60');
-            }
-            if (element) {
-                element.classList.remove('border-transparent', 'opacity-60');
-                element.classList.add('border-white', 'scale-110', 'shadow-lg');
-            }
-            
-            // プレイ中の自機ヘビがいればそのカラーも瞬時に変更
-            if (player && !player.isDead) {
-                player.skin = SKINS[index] || SKINS[0];
-            }
-            // スキン変更をロビー同期へ通知
-            syncLobbyStatus();
+        function handleMouseMove(e) {
+            if (!isPlaying || !player || player.isDead || isChatActive) return;
+
+            const movementX = Math.abs(e.clientX - lastMouseX);
+            const movementY = Math.abs(e.clientY - lastMouseY);
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+
+            if (movementX < 2 && movementY < 2) return;
+
+            if (keys.left || keys.right) return;
+
+            if (useMobileControls && joystickActive) return;
+
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            const dx = e.clientX - centerX;
+            const dy = e.clientY - centerY;
+
+            player.targetAngle = Math.atan2(dy, dx);
         }
 
-        function init() {
-            canvas = document.getElementById('gameCanvas');
-            ctx = canvas.getContext('2d');
-
-            minimapCanvas = document.getElementById('minimap');
-            minimapCtx = minimapCanvas.getContext('2d');
-
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
-
-            // スキン選択ボタンの自動生成
-            const selector = document.getElementById('skinSelector');
-            selector.innerHTML = ''; // 一旦クリア
-            SKINS.forEach((skin, idx) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = `w-6 h-6 rounded-full border-2 transition-transform active:scale-90 ${idx === 0 ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-60'}`;
-                btn.style.backgroundColor = skin.primary;
-                btn.style.boxShadow = `0 0 6px ${skin.glow}`;
-                btn.title = skin.name;
-                btn.onclick = () => selectSkin(idx, btn);
-                selector.appendChild(btn);
-            });
-
-            // デバイス判定＆チェック
-            const mobileCheckbox = document.getElementById('mobileControlsCheckbox');
-            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-            mobileCheckbox.checked = isTouchDevice;
-            useMobileControls = isTouchDevice;
-
-            mobileCheckbox.addEventListener('change', (e) => {
-                useMobileControls = e.target.checked;
-                updateMobileControlsVisibility();
-            });
-
-            // タブ切り替え: ノーマル vs オンライン
-            const tabNormal = document.getElementById('tabNormal');
-            const tabOnline = document.getElementById('tabOnline');
-            const panelNormal = document.getElementById('panelNormal');
-            const panelOnline = document.getElementById('panelOnline');
-
-            tabNormal.onclick = () => {
-                gameMode = 'normal';
-                tabNormal.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
-                tabOnline.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
-                panelNormal.classList.remove('hidden');
-                panelOnline.classList.add('hidden');
-                stopLobbyHeartbeat();
-            };
-
-            tabOnline.onclick = () => {
-                gameMode = 'online';
-                tabOnline.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
-                tabNormal.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
-                panelOnline.classList.remove('hidden');
-                panelNormal.classList.add('hidden');
-                startLobbyHeartbeat();
-            };
-
-            // オンラインサブタブ: パブリック vs プライベート
-            const subTabPublic = document.getElementById('subTabPublic');
-            const subTabPrivate = document.getElementById('subTabPrivate');
-            const privateSettingsArea = document.getElementById('privateSettingsArea');
-
-            subTabPublic.onclick = () => {
-                onlineSubMode = 'public';
-                currentRoomId = 'public';
-                subTabPublic.className = "py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow flex-1";
-                subTabPrivate.className = "py-1 text-slate-400 hover:text-white font-bold rounded flex-1";
-                privateSettingsArea.classList.add('hidden');
-                syncLobbyStatus();
-            };
-
-            subTabPrivate.onclick = () => {
-                onlineSubMode = 'private';
-                subTabPrivate.className = "py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow flex-1";
-                subTabPublic.className = "py-1 text-slate-400 hover:text-white font-bold rounded flex-1";
-                privateSettingsArea.classList.remove('hidden');
-                syncLobbyStatus();
-            };
-
-            // ホスト設定のトグル
-            const roleGuest = document.getElementById('roleGuest');
-            const roleHost = document.getElementById('roleHost');
-            const hostCustomSettings = document.getElementById('hostCustomSettings');
-
-            roleGuest.onchange = () => {
-                isRoomHost = false;
-                hostCustomSettings.classList.add('hidden');
-                syncLobbyStatus();
-            };
-            roleHost.onchange = () => {
-                isRoomHost = true;
-                hostCustomSettings.classList.remove('hidden');
-                syncLobbyStatus();
-            };
-
-            const cfgWorldSize = document.getElementById('cfgWorldSize');
-            const valWorldSize = document.getElementById('valWorldSize');
-            cfgWorldSize.oninput = () => { 
-                valWorldSize.innerText = `${cfgWorldSize.value}x${cfgWorldSize.value}`; 
-                syncLobbyStatus();
-            };
-
-            const cfgAiCount = document.getElementById('cfgAiCount');
-            const valAiCount = document.getElementById('valAiCount');
-            cfgAiCount.oninput = () => { 
-                valAiCount.innerText = `${cfgAiCount.value}匹`; 
-                syncLobbyStatus();
-            };
-
-            const cfgFoodCount = document.getElementById('cfgFoodCount');
-            const valFoodCount = document.getElementById('valFoodCount');
-            cfgFoodCount.oninput = () => { 
-                valFoodCount.innerText = `${cfgFoodCount.value}個`; 
-                syncLobbyStatus();
-            };
-
-            // パスワード入力時も即反映
-            const roomPasswordInput = document.getElementById('roomPasswordInput');
-            roomPasswordInput.oninput = () => {
-                syncLobbyStatus();
-            };
-
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mousedown', handleMouseDown);
-            window.addEventListener('mouseup', handleMouseUp);
-            
-            window.addEventListener('keydown', handleKeyDown);
-            window.addEventListener('keyup', handleKeyUp);
-
-            setupTouchEvents();
-
-            document.getElementById('startButton').addEventListener('click', startGame);
-            document.getElementById('restartButton').addEventListener('click', restartGame);
-        }
-
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-
-            minimapCanvas.width = 112;
-            minimapCanvas.height = 112;
-        }
-
-        function updateMobileControlsVisibility() {
-            const area = document.getElementById('mobileControlsArea');
-            if (isPlaying && useMobileControls) {
-                area.classList.remove('hidden');
-            } else {
-                area.classList.add('hidden');
+        function handleMouseDown(e) {
+            if (!isPlaying || !player || player.isDead || isChatActive) return;
+            if (e.button === 0) {
+                player.isDashing = true;
             }
         }
 
-        // ==========================================
-        // ゲームオーバー処理
-        // ==========================================
-        function onGameOver() {
-            isPlaying = false;
-            isChatActive = false;
-            
-            document.getElementById('finalScore').innerText = Math.floor(player.score);
-            document.getElementById('finalKills').innerText = totalKills;
-
-            document.getElementById('hud').classList.add('hidden');
-            updateMobileControlsVisibility(); 
-            document.getElementById('gameOverScreen').classList.remove('hidden');
-            
-            // ロビータイマーを復活させてロビーでのホストアピールを再開
-            startLobbyHeartbeat();
+        function handleMouseUp(e) {
+            if (!isPlaying || !player || player.isDead || isChatActive) return;
+            if (e.button === 0) {
+                player.isDashing = false;
+            }
         }
 
-        async function startGame() {
-            if (isPlaying) return; // 二重スタート防止
+        function handleKeyDown(e) {
+            if (!isPlaying || !player || player.isDead) return;
 
-            const nickname = document.getElementById('nicknameInput').value.trim() || 'PlayerSnake';
-            const selectedSkin = SKINS[selectedSkinIndex];
+            if (e.code === 'Enter') {
+                e.preventDefault();
+                if (isChatActive) {
+                    const txt = gameChatInput.value;
+                    if (txt.trim()) {
+                        const chatObj = { text: txt.trim(), time: Date.now() };
+                        pendingChatToSend = chatObj;
+                        
+                        handleChatReceived({
+                            senderUid: currentUser ? currentUser.uid : 'me',
+                            senderName: player.name,
+                            text: txt.trim(),
+                            time: chatObj.time,
+                            roomId: currentRoomId
+                        });
 
-            // オンラインモードを選択したがFirebase設定がない場合、親切な案内を出してブロック
-            if (gameMode === 'online' && !isConfigured) {
-                showToast("⚠️ オンラインで遊ぶにはFirebase設定が必要です！プログラム内の'myCustomConfig'に貼り付けてね！");
+                        syncSelfToFirebase();
+                        gameChatInput.value = '';
+                    } else {
+                        closeGameChat();
+                    }
+                } else {
+                    openGameChat();
+                }
                 return;
             }
 
-            // ゲーム中はスタート画面用のハートビートタイマーを一旦停止
-            stopLobbyHeartbeat();
+            if (isChatActive) return;
 
-            snakes = [];
-            foods = [];
-            totalKills = 0;
-            isChatActive = false;
-            pendingChatToSend = null;
-            gameChatHistory.length = 0; 
-
-            keys.up = false;
-            keys.down = false;
-            keys.left = false;
-            keys.right = false;
-            keys.dash = false;
-
-            // 1. 各モード解決
-            if (gameMode === 'online') {
-                if (!isFirebaseConnected) {
-                    showToast("エラー: まだサーバーに接続できていません。");
-                    return;
-                }
-
-                if (onlineSubMode === 'public') {
-                    await resolvePublicRoom();
-                } else {
-                    const passInput = document.getElementById('roomPasswordInput').value.trim();
-                    if (!passInput) {
-                        showToast("プライベート部屋のパスワードを設定してください。");
-                        return;
-                    }
-                    currentRoomId = passInput;
-                    document.getElementById('roomDisplay').innerText = `ROOM: ${passInput} (PRIVATE)`;
-                    
-                    if (isRoomHost) {
-                        WORLD_SIZE = parseInt(document.getElementById('cfgWorldSize').value);
-                        AI_COUNT = parseInt(document.getElementById('cfgAiCount').value);
-                        FOOD_COUNT = parseInt(document.getElementById('cfgFoodCount').value);
-                        showToast(`ホストとして部屋「${passInput}」を開始しました！`);
-                    } else {
-                        // ゲストの場合は、すでに受信したホストの設定が変数に適用されています
-                        showToast(`部屋「${passInput}」に合流して対戦を開始します！`);
-                    }
-                }
-
-                setupMultiplayerSubscription();
-                document.getElementById('rankingTitle').innerText = "オンラインランキング";
-            } else {
-                currentRoomId = 'local';
-                WORLD_SIZE = 4000;
-                AI_COUNT = 25; 
-                FOOD_COUNT = 800;
-                document.getElementById('roomDisplay').innerText = "LOCAL PLAY (AI)";
-                document.getElementById('rankingTitle').innerText = "ローカルランキング";
+            switch (e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    keys.up = true;
+                    player.isDashing = true; 
+                    e.preventDefault();
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    keys.down = true; 
+                    player.isDashing = false;
+                    e.preventDefault();
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    keys.left = true;
+                    e.preventDefault();
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    keys.right = true;
+                    e.preventDefault();
+                    break;
+                case 'Space':
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    keys.dash = true;
+                    player.isDashing = true;
+                    e.preventDefault();
+                    break;
             }
-
-            // 2. プレイヤー生成
-            const playerX = WORLD_SIZE / 2 + (Math.random() - 0.5) * 500;
-            const playerY = WORLD_SIZE / 2 + (Math.random() - 0.5) * 500;
-            player = new Snake('player', nickname, playerX, playerY, selectedSkin, false);
-            snakes.push(player);
-
-            spawnAIs(AI_COUNT);
-            spawnFoods(FOOD_COUNT);
-            spawnSpecialFoods(SPECIAL_FOOD_COUNT);
-
-            document.getElementById('startScreen').classList.add('hidden');
-            document.getElementById('gameOverScreen').classList.add('hidden');
-            document.getElementById('hud').classList.remove('hidden');
-
-            isPlaying = true;
-            updateMobileControlsVisibility();
-
-            // 🌟 プレイ開始した瞬間に最速でデータベースを更新し、友達の画面で合流をトリガー 🌟
-            if (gameMode === 'online') {
-                await forceSyncRoomAndPlayerToFirebase();
-                showToast("オンラインゲーム開始！ [Enter]キーでチャット＆一時停止ができます。");
-            } else {
-                showToast("シングルゲーム開始！ [Enter]キーで一時停止ができます。");
-            }
-
-            requestAnimationFrame(gameLoop);
         }
 
-        function restartGame() {
-            document.getElementById('gameOverScreen').classList.add('hidden');
-            document.getElementById('startScreen').classList.remove('hidden');
+        function handleKeyUp(e) {
+            if (!isPlaying || !player || player.isDead || isChatActive) return;
+
+            switch (e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    keys.up = false;
+                    if (!keys.dash) player.isDashing = false;
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    keys.down = false;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    keys.left = false;
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    keys.right = false;
+                    break;
+                case 'Space':
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    keys.dash = false;
+                    if (!keys.up) player.isDashing = false;
+                    break;
+            }
+        }
+
+        function updatePlayerAngleFromKeysContinuous() {
+            if (!player || player.isDead || isChatActive) return;
+
+            const turnRate = 0.055; 
+
+            if (keys.left) {
+                player.targetAngle -= turnRate;
+            }
+            if (keys.right) {
+                player.targetAngle += turnRate;
+            }
+
+            while (player.targetAngle < -Math.PI) player.targetAngle += Math.PI * 2;
+            while (player.targetAngle > Math.PI) player.targetAngle -= Math.PI * 2;
+        }
+
+        function setupTouchEvents() {
+            const joystickZone = document.getElementById('joystickZone');
+            const joystickKnob = document.getElementById('joystickKnob');
+            const dashButton = document.getElementById('dashButton');
+
+            joystickZone.addEventListener('touchstart', (e) => {
+                if (!useMobileControls || isChatActive) return;
+                joystickActive = true;
+                const touch = e.touches[0];
+                const rect = joystickZone.getBoundingClientRect();
+                joystickStart.x = rect.left + rect.width / 2;
+                joystickStart.y = rect.top + rect.height / 2;
+
+                updateJoystick(touch);
+                e.preventDefault();
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!useMobileControls || !joystickActive || isChatActive) return;
+                
+                for (let i = 0; i < e.touches.length; i++) {
+                    const touch = e.touches[i];
+                    if (touch.clientX < window.innerWidth * 0.6) {
+                        updateJoystick(touch);
+                        break;
+                    }
+                }
+            }, { passive: true });
+
+            window.addEventListener('touchend', (e) => {
+                if (!useMobileControls || !joystickActive) return;
+
+                let leftTouchStillExists = false;
+                for (let i = 0; i < e.touches.length; i++) {
+                    if (e.touches[i].clientX < window.innerWidth * 0.6) {
+                        leftTouchStillExists = true;
+                    }
+                }
+
+                if (!leftTouchStillExists) {
+                    joystickActive = false;
+                    joystickKnob.style.transform = `translate(0px, 0px)`;
+                }
+            });
+
+            function updateJoystick(touch) {
+                if (!player || player.isDead) return;
+
+                const dx = touch.clientX - joystickStart.x;
+                const dy = touch.clientY - joystickStart.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const maxRadius = 45;
+
+                let targetX = dx;
+                let targetY = dy;
+
+                if (dist > maxRadius) {
+                    const angle = Math.atan2(dy, dx);
+                    targetX = Math.cos(angle) * maxRadius;
+                    targetY = Math.sin(angle) * maxRadius;
+                }
+
+                joystickKnob.style.transform = `translate(${targetX}px, ${targetY}px)`;
+                player.targetAngle = Math.atan2(dy, dx);
+            }
+
+            dashButton.addEventListener('touchstart', (e) => {
+                if (!useMobileControls || isChatActive) return;
+                isMobileDashing = true;
+                if (player) player.isDashing = true;
+                e.preventDefault();
+            });
+
+            dashButton.addEventListener('touchend', (e) => {
+                if (!useMobileControls) return;
+                isMobileDashing = false;
+                if (player) player.isDashing = false;
+                e.preventDefault();
+            });
+        }
+
+        function showToast(text) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastText').innerText = text;
+            toast.style.opacity = '1';
             
-            // ロビー同期を再起動
-            startLobbyHeartbeat();
+            setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 3500);
         }
 
-        // ==========================================
-        // スポーンロジック
-        // ==========================================
+        function checkCollisions() {
+            if (!player || player.isDead) return;
+
+            const aliveSnakes = snakes.filter(s => !s.isDead);
+
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const f = foods[i];
+                
+                for (const snake of aliveSnakes) {
+                    if (snake.isGhost) continue;
+
+                    const head = snake.body[0];
+                    if (!head) continue;
+
+                    const dx = f.x - head.x;
+                    const dy = f.y - head.y;
+                    
+                    const maxDist = (snake.width / 2) + f.radius;
+                    if (Math.abs(dx) > maxDist || Math.abs(dy) > maxDist) {
+                        continue; 
+                    }
+
+                    const distSq = dx * dx + dy * dy;
+                    const collisionDistSq = maxDist * maxDist;
+
+                    if (distSq < collisionDistSq) {
+                        snake.score += f.value;
+                        foods.splice(i, 1);
+
+                        if (snake.id === 'player') {
+                            document.getElementById('scoreDisplay').innerText = Math.floor(player.score);
+                        }
+                        break; 
+                    }
+                }
+            }
+
+            for (let i = 0; i < snakes.length; i++) {
+                const s1 = snakes[i];
+                if (s1.isDead || s1.isGhost || s1.isRemote) continue; 
+
+                const head1 = s1.body[0];
+                if (!head1) continue;
+
+                for (let j = 0; j < snakes.length; j++) {
+                    const s2 = snakes[j];
+                    if (s2.isDead || s2.isGhost || s1.id === s2.id) continue;
+
+                    const approxS2Length = s2.body.length * 4; 
+                    const headToHeadDistSq = (head1.x - s2.x) * (head1.x - s2.x) + (head1.y - s2.y) * (head1.y - s2.y);
+                    const safeRadius = approxS2Length + 100;
+                    if (headToHeadDistSq > safeRadius * safeRadius) {
+                        continue; 
+                    }
+
+                    const s1HalfWidth = s1.width / 2;
+                    const s2HalfWidth = s2.width / 2;
+                    const collisionDist = s1HalfWidth + s2HalfWidth * 0.95;
+                    const collisionDistSq = collisionDist * collisionDist;
+
+                    for (let k = 0; k < s2.body.length; k++) {
+                        const segment = s2.body[k];
+                        if (!segment) continue;
+                        const dx = head1.x - segment.x;
+                        const dy = head1.y - segment.y;
+
+                        if (Math.abs(dx) > collisionDist || Math.abs(dy) > collisionDist) {
+                            continue;
+                        }
+
+                        const distSq = dx * dx + dy * dy;
+
+                        if (distSq < collisionDistSq) {
+                            s1.die();
+
+                            if (s1.id === 'player') {
+                                onGameOver();
+                            } else {
+                                setTimeout(() => {
+                                    if (isPlaying) {
+                                        snakes = snakes.filter(s => !s.isDead);
+                                        spawnAIs(1);
+                                    }
+                                }, 2000);
+                            }
+
+                            if (s2.id === 'player') {
+                                totalKills++;
+                                showToast("敵のヘビを撃破しました！ (+1キル)");
+                            }
+                            break;
+                        }
+                    }
+                    if (s1.isDead) break;
+                }
+            }
+        }
+
         function spawnAIs(count) {
             for (let i = 0; i < count; i++) {
                 const id = 'ai_' + Math.random().toString(36).substr(2, 9);
                 const name = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)] + ' (AI)';
                 
-                // 🌟 円形マップ内にAIを出現させる 🌟
                 const centerX = WORLD_SIZE / 2;
                 const centerY = WORLD_SIZE / 2;
                 const spawnRadius = (WORLD_SIZE / 2) - 150;
@@ -1831,9 +1742,8 @@
             const maxRadius = (WORLD_SIZE / 2) - 50;
 
             for (let i = 0; i < count; i++) {
-                // 🌟 円形マップ内にきれいにエサを配置する 🌟
                 const angle = Math.random() * Math.PI * 2;
-                const dist = Math.sqrt(Math.random()) * maxRadius; // 外側にも均等に散らばるように平方根を使用
+                const dist = Math.sqrt(Math.random()) * maxRadius; 
 
                 const rx = centerX + Math.cos(angle) * dist;
                 const ry = centerY + Math.sin(angle) * dist;
@@ -1858,18 +1768,76 @@
             }
         }
 
-        // ==========================================
-        // インゲームHUD（ミニマップ）描画
-        // ==========================================
-        // updateUI() 内で呼び出されます
+        function drawArenaBackground(ctx, cameraX, cameraY, zoom) {
+            ctx.save();
+            const centerX = (WORLD_SIZE / 2 - cameraX) * zoom + window.innerWidth / 2;
+            const centerY = (WORLD_SIZE / 2 - cameraY) * zoom + window.innerHeight / 2;
+            const radius = (WORLD_SIZE / 2) * zoom;
 
-        // ==========================================
-        // コリジョン判定は既存
-        // ==========================================
+            const grad = ctx.createRadialGradient(centerX, centerY, radius * 0.85, centerX, centerY, radius);
+            grad.addColorStop(0, 'rgba(5, 7, 15, 0)');
+            grad.addColorStop(0.95, 'rgba(5, 7, 15, 0.85)');
+            grad.addColorStop(1, 'rgba(5, 7, 15, 1)');
 
-        // ==========================================
-        // UI & ミニマップ更新
-        // ==========================================
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawWorldBounds(ctx, cameraX, cameraY, zoom) {
+            const centerX = (WORLD_SIZE / 2 - cameraX) * zoom + window.innerWidth / 2;
+            const centerY = (WORLD_SIZE / 2 - cameraY) * zoom + window.innerHeight / 2;
+            const radius = (WORLD_SIZE / 2) * zoom;
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+            ctx.lineWidth = 14 * zoom;
+            ctx.shadowBlur = 24 * zoom;
+            ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius - (7 * zoom), 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, window.innerWidth, window.innerHeight);
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, true); 
+            ctx.clip();
+
+            ctx.fillStyle = '#020306';
+            ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+            ctx.restore();
+        }
+
+        function drawGrid(ctx, cameraX, cameraY, zoom) {
+            ctx.save();
+            ctx.strokeStyle = '#12192c'; 
+            ctx.lineWidth = 0.5 * zoom;
+
+            const step = GRID_SIZE * zoom;
+            const offsetX = (window.innerWidth / 2 - cameraX * zoom) % step;
+            const offsetY = (window.innerHeight / 2 - cameraY * zoom) % step;
+
+            ctx.beginPath();
+            
+            for (let x = offsetX; x < window.innerWidth; x += step) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, window.innerHeight);
+            }
+
+            for (let y = offsetY; y < window.innerHeight; y += step) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(window.innerWidth, y);
+            }
+
+            ctx.stroke(); 
+            ctx.restore();
+        }
+
         function updateUI() {
             const aliveSnakes = snakes.filter(s => !s.isDead);
             aliveSnakes.sort((a, b) => b.score - a.score);
@@ -1898,22 +1866,19 @@
                 document.getElementById('rankDisplay').innerText = `順位: ${myRank} / ${aliveSnakes.length}`;
             }
 
-            // 🌟 円形ネオンミニマップの超美麗な描画処理 🌟
             minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
             const mWidth = minimapCanvas.width;
             const mHeight = minimapCanvas.height;
             const mCenterX = mWidth / 2;
             const mCenterY = mHeight / 2;
-            const mRadius = mWidth / 2 - 6; // レーダー枠の内側の半径
+            const mRadius = mWidth / 2 - 6; 
 
-            // 1. レーダーグリッド背景の描画
             minimapCtx.save();
             minimapCtx.beginPath();
             minimapCtx.arc(mCenterX, mCenterY, mRadius, 0, Math.PI * 2);
             minimapCtx.fillStyle = 'rgba(15, 23, 42, 0.7)';
             minimapCtx.fill();
             
-            // 同心円（レーダーの目盛り線）
             minimapCtx.strokeStyle = 'rgba(6, 182, 212, 0.15)';
             minimapCtx.lineWidth = 1;
             for (let r = mRadius / 3; r <= mRadius; r += mRadius / 3) {
@@ -1922,7 +1887,6 @@
                 minimapCtx.stroke();
             }
 
-            // 十字ライン
             minimapCtx.beginPath();
             minimapCtx.moveTo(mCenterX - mRadius, mCenterY);
             minimapCtx.lineTo(mCenterX + mRadius, mCenterY);
@@ -1931,7 +1895,6 @@
             minimapCtx.stroke();
             minimapCtx.restore();
 
-            // 2. マップ全体の円形境界線をミニマップ上に描画
             minimapCtx.save();
             minimapCtx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
             minimapCtx.lineWidth = 1.5;
@@ -1942,13 +1905,11 @@
             minimapCtx.stroke();
             minimapCtx.restore();
 
-            // 3. プレイヤーや他のヘビたちの位置をマップ上にプロット
-            const ratio = (mRadius - 4) / (WORLD_SIZE / 2); // 中心地からの距離変換比率
+            const ratio = (mRadius - 4) / (WORLD_SIZE / 2); 
 
             for (const s of aliveSnakes) {
                 if (s.id === 'player') continue;
 
-                // 中心地からの相対座標を算出
                 const dx = s.x - WORLD_SIZE / 2;
                 const dy = s.y - WORLD_SIZE / 2;
                 
@@ -1962,7 +1923,6 @@
                 minimapCtx.fill();
             }
 
-            // 4. 自機プレイヤーの描画（ひときわ輝くシアンの点）
             if (player && !player.isDead) {
                 const dx = player.x - WORLD_SIZE / 2;
                 const dy = player.y - WORLD_SIZE / 2;
@@ -1976,10 +1936,9 @@
                 minimapCtx.beginPath();
                 minimapCtx.arc(dotX, dotY, 4, 0, Math.PI * 2);
                 minimapCtx.fill();
-                ctx.restore();
+                minimapCtx.restore();
             }
 
-            // 5. 外枠ベゼルの描画
             minimapCtx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
             minimapCtx.lineWidth = 2.5;
             minimapCtx.beginPath();
@@ -1987,9 +1946,33 @@
             minimapCtx.stroke();
         }
 
-        // ==========================================
-        // メインゲームループ
-        // ==========================================
+        let previewAnimationId = null;
+
+        function drawLobbyPreview() {
+            if (isPlaying) {
+                if (previewAnimationId) {
+                    cancelAnimationFrame(previewAnimationId);
+                    previewAnimationId = null;
+                }
+                return;
+            }
+
+            const tempCameraX = WORLD_SIZE / 2;
+            const tempCameraY = WORLD_SIZE / 2;
+            const tempZoom = 0.8;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawGrid(ctx, tempCameraX, tempCameraY, tempZoom);
+            foods.forEach(f => {
+                f.pulseTime += f.pulseSpeed;
+                f.draw(ctx, tempCameraX, tempCameraY, tempZoom);
+            });
+            drawWorldBounds(ctx, tempCameraX, tempCameraY, tempZoom);
+
+            previewAnimationId = requestAnimationFrame(drawLobbyPreview);
+        }
+
         function gameLoop() {
             if (!isPlaying) return;
 
@@ -2029,8 +2012,6 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             drawGrid(ctx, cameraX, cameraY, zoom);
-
-            // 🌟 円形ワールドのアリーナ背景（外側を暗くする）の描画 🌟
             drawArenaBackground(ctx, cameraX, cameraY, zoom);
 
             foods.forEach(f => f.draw(ctx, cameraX, cameraY, zoom));
@@ -2049,84 +2030,306 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // 🌟 円形アリーナの背景マスク（マップの外側を真っ暗にする） 🌟
-        function drawArenaBackground(ctx, cameraX, cameraY, zoom) {
-            ctx.save();
-            const centerX = (WORLD_SIZE / 2 - cameraX) * zoom + window.innerWidth / 2;
-            const centerY = (WORLD_SIZE / 2 - cameraY) * zoom + window.innerHeight / 2;
-            const radius = (WORLD_SIZE / 2) * zoom;
-
-            // 円の外側を切り抜く（クリッピングか反転塗り潰し）
-            // 画面全体を覆う四角形からワールド円形をくり抜いて暗くする
-            ctx.fillStyle = '#05070f';
+        // ==========================================
+        // 🌟 ユニーク関数群の完全な定義（一本化） 🌟
+        // ==========================================
+        function selectSkin(index, element) {
+            selectedSkinIndex = index;
+            const buttons = document.getElementById('skinSelector').children;
+            for (let btn of buttons) {
+                btn.classList.remove('border-white', 'scale-110', 'shadow-lg');
+                btn.classList.add('border-transparent', 'opacity-60');
+            }
+            if (element) {
+                element.classList.remove('border-transparent', 'opacity-60');
+                element.classList.add('border-white', 'scale-110', 'shadow-lg');
+            }
             
-            // 境界の外に巨大なドーナツ状の影を描く
-            const grad = ctx.createRadialGradient(centerX, centerY, radius * 0.85, centerX, centerY, radius);
-            grad.addColorStop(0, 'rgba(5, 7, 15, 0)');
-            grad.addColorStop(0.95, 'rgba(5, 7, 15, 0.85)');
-            grad.addColorStop(1, 'rgba(5, 7, 15, 1)');
-
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.restore();
+            if (player && !player.isDead) {
+                player.skin = SKINS[index] || SKINS[0];
+            }
+            syncLobbyStatus();
         }
 
-        // 🌟 円形アリーナの境界ネオンサークル描画 🌟
-        function drawWorldBounds(ctx, cameraX, cameraY, zoom) {
-            ctx.save();
-            
-            const centerX = (WORLD_SIZE / 2 - cameraX) * zoom + window.innerWidth / 2;
-            const centerY = (WORLD_SIZE / 2 - cameraY) * zoom + window.innerHeight / 2;
-            const radius = (WORLD_SIZE / 2) * zoom;
-
-            // マップ外を完全に暗黒に塗る
-            ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
-            ctx.lineWidth = 14 * zoom;
-            ctx.shadowBlur = 24 * zoom;
-            ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
-
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, radius - (7 * zoom), 0, Math.PI * 2);
-            ctx.stroke();
-
-            // ドーナツの穴のようにワールド外側を完全に隠す
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = '#020306';
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-            ctx.rect(window.innerWidth, 0, -window.innerWidth, window.innerHeight); // 画面全体
-            ctx.fill();
-
-            ctx.restore();
+        function resizeCanvas() {
+            if (canvas) {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            if (minimapCanvas) {
+                minimapCanvas.width = 112;
+                minimapCanvas.height = 112;
+            }
         }
 
-        function drawGrid(ctx, cameraX, cameraY, zoom) {
-            ctx.save();
-            ctx.strokeStyle = '#12192c'; 
-            ctx.lineWidth = 0.5 * zoom;
+        function updateMobileControlsVisibility() {
+            const area = document.getElementById('mobileControlsArea');
+            if (isPlaying && useMobileControls) {
+                area.classList.remove('hidden');
+            } else {
+                area.classList.add('hidden');
+            }
+        }
 
-            const step = GRID_SIZE * zoom;
-            const offsetX = (window.innerWidth / 2 - cameraX * zoom) % step;
-            const offsetY = (window.innerHeight / 2 - cameraY * zoom) % step;
-
-            ctx.beginPath();
+        function onGameOver() {
+            isPlaying = false;
+            isChatActive = false;
             
-            for (let x = offsetX; x < window.innerWidth; x += step) {
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, window.innerHeight);
+            document.getElementById('finalScore').innerText = Math.floor(player.score);
+            document.getElementById('finalKills').innerText = totalKills;
+
+            document.getElementById('hud').classList.add('hidden');
+            updateMobileControlsVisibility(); 
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            
+            startLobbyHeartbeat();
+        }
+
+        async function startGame() {
+            if (isPlaying) return; 
+
+            const nickname = document.getElementById('nicknameInput').value.trim() || 'PlayerSnake';
+            const selectedSkin = SKINS[selectedSkinIndex];
+
+            if (gameMode === 'online' && !isConfigured) {
+                showToast("⚠️ オンラインで遊ぶにはFirebase設定が必要です！");
+                return;
             }
 
-            for (let y = offsetY; y < window.innerHeight; y += step) {
-                ctx.moveTo(0, y);
-                ctx.lineTo(window.innerWidth, y);
+            stopLobbyHeartbeat();
+
+            if (previewAnimationId) {
+                cancelAnimationFrame(previewAnimationId);
+                previewAnimationId = null;
             }
 
-            ctx.stroke(); 
-            ctx.restore();
+            snakes = [];
+            foods = [];
+            totalKills = 0;
+            isChatActive = false;
+            pendingChatToSend = null;
+            gameChatHistory.length = 0; 
+
+            keys.up = false;
+            keys.down = false;
+            keys.left = false;
+            keys.right = false;
+            keys.dash = false;
+
+            if (gameMode === 'online') {
+                if (!isFirebaseConnected) {
+                    showToast("エラー: まだサーバーに接続できていません。");
+                    return;
+                }
+
+                if (onlineSubMode === 'public') {
+                    await resolvePublicRoom();
+                } else {
+                    const passInput = document.getElementById('roomPasswordInput').value.trim();
+                    if (!passInput) {
+                        showToast("プライベート部屋のパスワードを設定してください。");
+                        return;
+                    }
+                    currentRoomId = passInput;
+                    document.getElementById('roomDisplay').innerText = `ROOM: ${passInput} (PRIVATE)`;
+                    
+                    if (isRoomHost) {
+                        WORLD_SIZE = parseInt(document.getElementById('cfgWorldSize').value);
+                        AI_COUNT = parseInt(document.getElementById('cfgAiCount').value);
+                        FOOD_COUNT = parseInt(document.getElementById('cfgFoodCount').value);
+                        showToast(`ホストとして部屋「${passInput}」を開始しました！`);
+                    } else {
+                        showToast(`部屋「${passInput}」に合流して対戦を開始します！`);
+                    }
+                }
+
+                setupMultiplayerSubscription();
+                document.getElementById('rankingTitle').innerText = "オンラインランキング";
+            } else {
+                currentRoomId = 'local';
+                WORLD_SIZE = 4000;
+                AI_COUNT = 25; 
+                FOOD_COUNT = 800;
+                document.getElementById('roomDisplay').innerText = "LOCAL PLAY (AI)";
+                document.getElementById('rankingTitle').innerText = "ローカルランキング";
+            }
+
+            const playerX = WORLD_SIZE / 2 + (Math.random() - 0.5) * 500;
+            const playerY = WORLD_SIZE / 2 + (Math.random() - 0.5) * 500;
+            player = new Snake('player', nickname, playerX, playerY, selectedSkin, false);
+            snakes.push(player);
+
+            spawnAIs(AI_COUNT);
+            spawnFoods(FOOD_COUNT);
+            spawnSpecialFoods(SPECIAL_FOOD_COUNT);
+
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+
+            isPlaying = true;
+            updateMobileControlsVisibility();
+
+            if (gameMode === 'online') {
+                await forceSyncRoomAndPlayerToFirebase();
+                showToast("オンラインゲーム開始！ [Enter]キーでチャットができます。");
+            } else {
+                showToast("シングルゲーム開始！ [Enter]キーで一時停止ができます。");
+            }
+
+            requestAnimationFrame(gameLoop);
         }
+
+        function restartGame() {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('startScreen').classList.remove('hidden');
+            
+            startLobbyHeartbeat();
+            foods = [];
+            spawnFoods(100); 
+            drawLobbyPreview();
+        }
+
+        // ==========================================
+        // UIインタラクション ＆ 初期化の実行
+        // ==========================================
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            minimapCanvas = document.getElementById('minimap');
+            minimapCtx = minimapCanvas.getContext('2d');
+
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            const selector = document.getElementById('skinSelector');
+            selector.innerHTML = ''; 
+            SKINS.forEach((skin, idx) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `w-6 h-6 rounded-full border-2 transition-transform active:scale-90 ${idx === 0 ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-60'}`;
+                btn.style.backgroundColor = skin.primary;
+                btn.style.boxShadow = `0 0 6px ${skin.glow}`;
+                btn.title = skin.name;
+                btn.onclick = () => selectSkin(idx, btn);
+                selector.appendChild(btn);
+            });
+
+            const mobileCheckbox = document.getElementById('mobileControlsCheckbox');
+            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            mobileCheckbox.checked = isTouchDevice;
+            useMobileControls = isTouchDevice;
+
+            mobileCheckbox.addEventListener('change', (e) => {
+                useMobileControls = e.target.checked;
+                updateMobileControlsVisibility();
+            });
+
+            const tabNormal = document.getElementById('tabNormal');
+            const tabOnline = document.getElementById('tabOnline');
+            const panelNormal = document.getElementById('panelNormal');
+            const panelOnline = document.getElementById('panelOnline');
+
+            tabNormal.onclick = () => {
+                gameMode = 'normal';
+                tabNormal.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
+                tabOnline.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
+                panelNormal.classList.remove('hidden');
+                panelOnline.classList.add('hidden');
+                stopLobbyHeartbeat();
+            };
+
+            tabOnline.onclick = () => {
+                gameMode = 'online';
+                tabOnline.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
+                tabNormal.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
+                panelOnline.classList.remove('hidden');
+                panelNormal.classList.add('hidden');
+                startLobbyHeartbeat();
+            };
+
+            const subTabPublic = document.getElementById('subTabPublic');
+            const subTabPrivate = document.getElementById('subTabPrivate');
+            const privateSettingsArea = document.getElementById('privateSettingsArea');
+
+            subTabPublic.onclick = () => {
+                onlineSubMode = 'public';
+                currentRoomId = 'public';
+                subTabPublic.className = "py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow flex-1";
+                subTabPrivate.className = "py-1 text-slate-400 hover:text-white font-bold rounded flex-1";
+                privateSettingsArea.classList.add('hidden');
+                syncLobbyStatus();
+            };
+
+            subTabPrivate.onclick = () => {
+                onlineSubMode = 'private';
+                subTabPrivate.className = "py-1 text-cyan-400 font-bold rounded bg-slate-800 shadow flex-1";
+                subTabPublic.className = "py-1 text-slate-400 hover:text-white font-bold rounded flex-1";
+                privateSettingsArea.classList.remove('hidden');
+                syncLobbyStatus();
+            };
+
+            const roleGuest = document.getElementById('roleGuest');
+            const roleHost = document.getElementById('roleHost');
+            const hostCustomSettings = document.getElementById('hostCustomSettings');
+
+            roleGuest.onchange = () => {
+                isRoomHost = false;
+                hostCustomSettings.classList.add('hidden');
+                syncLobbyStatus();
+            };
+            roleHost.onchange = () => {
+                isRoomHost = true;
+                hostCustomSettings.classList.remove('hidden');
+                syncLobbyStatus();
+            };
+
+            const cfgWorldSize = document.getElementById('cfgWorldSize');
+            const valWorldSize = document.getElementById('valWorldSize');
+            cfgWorldSize.oninput = () => { 
+                valWorldSize.innerText = `${cfgWorldSize.value}x${cfgWorldSize.value}`; 
+                syncLobbyStatus();
+            };
+
+            const cfgAiCount = document.getElementById('cfgAiCount');
+            const valAiCount = document.getElementById('valAiCount');
+            cfgAiCount.oninput = () => { 
+                valAiCount.innerText = `${cfgAiCount.value}匹`; 
+                syncLobbyStatus();
+            };
+
+            const cfgFoodCount = document.getElementById('cfgFoodCount');
+            const valFoodCount = document.getElementById('valFoodCount');
+            cfgFoodCount.oninput = () => { 
+                valFoodCount.innerText = `${cfgFoodCount.value}個`; 
+                syncLobbyStatus();
+            };
+
+            const roomPasswordInput = document.getElementById('roomPasswordInput');
+            roomPasswordInput.oninput = () => {
+                syncLobbyStatus();
+            };
+
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mousedown', handleMouseDown);
+            window.addEventListener('mouseup', handleMouseUp);
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+
+            setupTouchEvents();
+
+            document.getElementById('startButton').addEventListener('click', startGame);
+            document.getElementById('restartButton').addEventListener('click', restartGame);
+
+            initAuth();
+            spawnFoods(100); 
+            drawLobbyPreview();
+        }
+
+        window.addEventListener('load', () => {
+            init();
+        });
     </script>
 </body>
 </html>
